@@ -192,6 +192,12 @@ ModulePass *createMergeFunctionsPass();
 ///
 ModulePass *createPartialInliningPass();
 
+//===----------------------------------------------------------------------===//
+/// createIndirectFunctionCallPromotionPass - This pass promotes
+/// indirect function calls to direct function calls.
+///
+ModulePass *createIndirectFunctionCallPromotionPass();
+
 } // End llvm namespace
 
 #endif
