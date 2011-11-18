@@ -140,6 +140,12 @@ namespace {
                                 "Large code model"),
                      clEnumValEnd));
 
+  cl::opt<bool>
+  UseIFCProfileJitListener("use-ifcprofile-listener",
+                  cl::desc("Enable indirect branch profile JIT listener"),
+                  cl::init(false),
+                  cl::Hidden);
+
 }
 
 static ExecutionEngine *EE = 0;
@@ -234,6 +240,9 @@ int main(int argc, char **argv, char * const *envp) {
   }
 
   EE->RegisterJITEventListener(createOProfileJITEventListener());
+  if(UseIFCProfileJitListener) {
+    EE->RegisterJITEventListener(createIFCProfileJITEventListener());
+  }
 
   EE->DisableLazyCompilation(NoLazyCompilation);
 

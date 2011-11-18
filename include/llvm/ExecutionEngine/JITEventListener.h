@@ -77,6 +77,9 @@ public:
 // This returns NULL if support isn't available.
 JITEventListener *createOProfileJITEventListener();
 
+// Listener used to profile indirect branch targets
+JITEventListener *createIFCProfileJITEventListener();
+
 } // end namespace llvm.
 
 #endif
