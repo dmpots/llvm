@@ -110,6 +110,7 @@ void initializeIPSCCPPass(PassRegistry&);
 void initializeIVUsersPass(PassRegistry&);
 void initializeIfConverterPass(PassRegistry&);
 void initializeIndVarSimplifyPass(PassRegistry&);
+void initializeIndirectFunctionCallProfilerPass(PassRegistry&);
 void initializeIndirectFunctionCallPromotionPass(PassRegistry&);
 void initializeInstCombinerPass(PassRegistry&);
 void initializeInstCountPass(PassRegistry&);
