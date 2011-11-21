@@ -17,6 +17,9 @@
 
 #include "llvm/Analysis/ProfileInfoTypes.h" /* for enum ProfilingType */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* save_arguments - Save argc and argv as passed into the program for the file
  * we output.
  */
@@ -32,5 +35,7 @@ int getOutFile();
  */
 void write_profiling_data(enum ProfilingType PT, unsigned *Start,
                           unsigned NumElements);
-
+#ifdef __cplusplus
+}
+#endif
 #endif

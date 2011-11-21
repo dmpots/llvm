@@ -10,3 +10,6 @@ llvm_gcda_increment_indirect_counter
 llvm_gcda_emit_function
 llvm_gcda_emit_arcs
 llvm_gcda_end_file
+llvm_increment_indirect_target_count
+llvm_ifc_add_target_address
+llvm_start_indirect_function_call_profiling
