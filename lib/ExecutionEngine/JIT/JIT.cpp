@@ -584,6 +584,16 @@ void JIT::NotifyFreeingMachineCode(void *OldPtr) {
   }
 }
 
+void JIT::NotifyResolvedLazyStub(void *Stub,
+                                 const Function& F,
+                                 void *FunctionCode)
+{
+  MutexGuard locked(lock);
+  for (unsigned I = 0, S = EventListeners.size(); I < S; ++I) {
+    EventListeners[I]->NotifyResolvedLazyStub(Stub, F, FunctionCode);
+  }
+}
+
 /// runJITOnFunction - Run the FunctionPassManager full of
 /// just-in-time compilation passes on F, hopefully filling in
 /// GlobalAddress[F] with the address of F's machine code.

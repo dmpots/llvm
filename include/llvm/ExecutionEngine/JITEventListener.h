@@ -72,6 +72,18 @@ public:
   /// to NotifyFunctionEmitted may have been destroyed by the time of the
   /// matching NotifyFreeingMachineCode call.
   virtual void NotifyFreeingMachineCode(void *OldPtr) {}
+
+  /// NotifyResolvedLazyStub - Called after a function stub has been resolved to
+  /// an actual function and code has been emitted for that function.
+  ///
+  /// This is called the first time a function stub is entered after the actual
+  /// function it represents has been found and code has been generated for that
+  /// function. This call is particularly useful for tracking indirect branches
+  /// since they will reference the function stub address rather than the
+  /// generated machine code.
+  virtual void NotifyResolvedLazyStub(void *Stub,
+                                      const Function& F,
+                                      void *FunctionCode) {}
 };
 
 // This returns NULL if support isn't available.

@@ -201,6 +201,9 @@ public:
       const Function &F, void *Code, size_t Size,
       const JITEvent_EmittedFunctionDetails &Details);
   void NotifyFreeingMachineCode(void *OldPtr);
+  void NotifyResolvedLazyStub(void *Stub,
+                              const Function& F,
+                              void *FunctionCode);
 
   BasicBlockAddressMapTy &
   getBasicBlockAddressMap(const MutexGuard &) {

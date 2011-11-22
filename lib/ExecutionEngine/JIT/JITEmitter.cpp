@@ -671,6 +671,7 @@ void *JITResolver::JITCompilerFn(void *Stub) {
     (void)ActualPtr;
 
     Result = JR->TheJIT->getPointerToFunction(F);
+    JR->TheJIT->NotifyResolvedLazyStub(ActualPtr, *F, Result);
   }
 
   // Reacquire the lock to update the GOT map.
