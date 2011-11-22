@@ -29,9 +29,11 @@
 
 #include "ProfilingUtils.h"
 #include "llvm/Constants.h"
+#include "llvm/IndirectFunctionCallProfiling.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Instrumentation.h"
@@ -40,14 +42,15 @@
 
 using namespace llvm;
 
-STATISTIC(NumAnnotationsInserted, "The # of annotations inserted.");
+STATISTIC(NumAnnotationsInserted, "The # of function number annotations inserted.");
+STATISTIC(NumCallsProfiled,       "The # of indirect calls profiled.");
 
 namespace {
   class IndirectFunctionCallProfiler : public ModulePass {
     bool runOnModule(Module &M);
   public:
     static char ID; // Pass identification, replacement for typeid
-    IndirectFunctionCallProfiler() : ModulePass(ID), fn(0), cn(0) {
+    IndirectFunctionCallProfiler() : ModulePass(ID), fn(1), cn(1) {
       initializeIndirectFunctionCallProfilerPass(*PassRegistry::getPassRegistry());
     }
 
@@ -56,11 +59,9 @@ namespace {
     }
 
   private:
-    // TODO we should share these definitions so other passes can see them
-    typedef uint32_t FunctionNumber;
-    typedef uint32_t CallSiteNumber;
-    FunctionNumber fn; // Use pre-increment to keep 0 as an invalid function number
-    CallSiteNumber cn; // Use pre-increment to keep 0 as an invalid callsite number
+    prof::FunctionNumber fn;
+    prof::CallSiteNumber cn;
+    Constant *incrementTargetFunction; // profiling runtime function to call
 
     void addFunctionNumberAnnotation(Function *F);
     void addIndirectCallInstrumentation(Function *F);
@@ -128,18 +129,29 @@ static Function* getAnnotationFunction(Module *M) {
 //==============================================================================
 // Pass Implementation
 //
+
+////////////////////////////////////////////////////////////////////////////////
+// Loop over the module, looking for function definitions We add an annotation
+// to each function definition that records the function number, which is just
+// a linear numbering of the functions in the module. This number is used at
+// runtime as an identifer for functions that are targeted by indirect
+// branches.
+//
+// In addition to the function number annotation, we add a callback to the
+// profiling runtime at each indirect call. The callback takes an identifer
+// for the call site and the address of the function being called.
 bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
-  // Loop over the module, looking for function definitions We add an annotation
-  // to each function definition that records the function number, which is just
-  // a linear numbering of the functions in the module. This number is used at
-  // runtime as an identifer for functions that are targeted by indirect
-  // branches.
-  //
-  // In addition to the function number annotation, we add a callback to the
-  // profiling runtime at each indirect call. The callback takes an identifer
-  // for the call site and the address of the function being called.
+  LLVMContext &Context = M.getContext();
+  // Insert prototype for the increment function
+  incrementTargetFunction =
+    M.getOrInsertFunction("llvm_increment_indirect_target_count",
+                          Type::getVoidTy(Context),  // return type
+                          Type::getInt32Ty(Context), // call site number
+                          Type::getInt8PtrTy(Context), // function address
+                          NULL );
+
+
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
-    
     // Look at all the functions in the Module
     Function *F = dyn_cast<Function>(I);
     if(!F) continue;
@@ -164,7 +176,8 @@ void IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F) {
   
   // Get function number as an i8* to pass to the annotation
   ConstantInt *FunctionNumberConst = 
-    ConstantInt::get(M->getContext(), APInt(32, ++fn));
+    ConstantInt::get(M->getContext(), APInt(32, fn++));
+
   PointerType* PointerTy_i8 = 
     PointerType::get(IntegerType::get(M->getContext(), 8), 0);
   Constant *FunctionNumber = 
@@ -196,5 +209,37 @@ void IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F) {
 }
 
 void IndirectFunctionCallProfiler::addIndirectCallInstrumentation(Function *F) {
-  // TODO: Add instrumentation at each indirect call
+  LLVMContext &Context = F->getContext();
+
+  for(Function::iterator B = F->begin(), BE = F->end(); B != BE; ++B) {
+    for(BasicBlock::iterator I = B->begin(), IE = B->end(); I != IE; ++I) {
+      // See if this is an indirect call
+      CallInst *C = dyn_cast<CallInst>(I);
+      if(!C || !prof::isIndirectCall(*C))
+        continue;
+
+      // Prepare profiling call arguments
+      std::vector<Value*> args(2);
+      args[0] = ConstantInt::get(Type::getInt32Ty(F->getContext()), cn++);
+      args[1] = CastInst::CreateTruncOrBitCast(C->getCalledValue(),
+                                               Type::getInt8PtrTy(Context),
+                                               "ifc.target", C);
+
+      // Insert the profiling call right before the indirect call
+      CallInst::Create(incrementTargetFunction, args, "", C);
+      ++NumCallsProfiled;
+    }
+  }
+}
+
+bool prof::isIndirectCall(const CallInst& call) {
+  // An indirect call will return NULL for the Function
+  if(call.getCalledFunction()) return false;
+
+
+  // Seems that intrinsic fucntions also return null for getCalledFunction
+  // try to filter them out by checking that we are not calling a global value.
+  if(isa<GlobalValue>(call.getCalledValue())) return false;
+
+  return true;
 }
