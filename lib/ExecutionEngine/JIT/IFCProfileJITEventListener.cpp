@@ -7,34 +7,60 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines a JITEventListener object that helps profiling
-// for indirect function call targets
+// This file defines a JITEventListener object that helps profiling for indirect
+// function call targets.
+//
+// Its primary job is to record the association between machine code addresses
+// and LLVM Function objects. The listener waits for the jit to resolve a
+// function stub to an actual function. When that happens we get a notification
+// and issue a callback to the profiling runtime that associates the function
+// stub to a function number. The function number is read from the Function
+// object by looking for the annotation that was inserted with the
+// -insert-ifc-profiling pass. That pass also inserts callbacks before each
+// indirect function call which will pass the indirect function (which is
+// actually a function stub) to the profiling runtime which can then use the
+// info from the listener to match the function stub address to an actual
+// function.
+//
+// To avoid having to link with the profiling runtime just to support this one
+// listener we dynamically lookup the profiling runtime callback function at
+// execution time. The user will have to load the profiling runtime using a
+// -load option to the JIT. This restriction is not too bad since they will have
+// to do that to access the other profiling functions in the instrumented
+// program anyway.
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "ibprofile-jit-event-listener"
+#define DEBUG_TYPE "ifcprofile-jit-event-listener"
 #include "llvm/Constants.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
+#include "llvm/IndirectFunctionCallProfiling.h"
 #include "llvm/Module.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/raw_ostream.h"
+
 using namespace llvm;
 
 namespace {
+  typedef void (*IFCCallbackFun)(prof::FunctionNumber, void*);
+
   class IFCProfileJITEventListener : public JITEventListener {
   public:
     IFCProfileJITEventListener();
     ~IFCProfileJITEventListener();
     
-    virtual void NotifyFunctionEmitted(const Function &F,
-                                       void *Code, size_t Size,
-                                       const EmittedFunctionDetails &Details);
-    virtual void NotifyFreeingMachineCode(void *OldPtr);
-  };
+    virtual void NotifyResolvedLazyStub(void *Stub,
+                                        const Function& F,
+                                        void *FunctionCode);
+    bool hasProfilingCallback();
 
-  typedef uint32_t FunctionNumber;
+  private:
+    IFCCallbackFun llvm_ifc_add_target_address;
+    bool attemptedLookup; // only lookup the callback function once
+  };
 }
 
 //==============================================================================
@@ -62,7 +88,7 @@ static const char annotationFunName[] = "llvm.var.annotation";
 // Once we have the right annotation call we can simple read off the first
 // paramater to the annotation call which is the function number (cast to an i8*
 // to satisify the type system)
-static FunctionNumber GetFunctionNumber(const Function &F) {
+static prof::FunctionNumber getFunctionNumber(const Function &F) {
   const BasicBlock &B = F.getEntryBlock();
   for(BasicBlock::const_iterator I = B.begin(), E = B.end(); I != E; ++I) {
     const CallInst *C = dyn_cast<CallInst>(&*I);    
@@ -105,7 +131,6 @@ static FunctionNumber GetFunctionNumber(const Function &F) {
     }
 
     // Ok, this is the correct annotation call so now get the function number
-    DEBUG(dbgs() << "Annotation found, extracting function number\n");
     ConstantExpr *annotationCast = dyn_cast<ConstantExpr>(C->getArgOperand(0));
     if(!annotationCast) {
       DEBUG(dbgs() << "Odd ifcprofile annotation: expected cast\n" 
@@ -124,24 +149,64 @@ static FunctionNumber GetFunctionNumber(const Function &F) {
   return 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Attempt to locate the profiling callback function dynamically
+//
+static IFCCallbackFun dynamicLookupCallbackFun() {
+  void *callback =
+    sys::DynamicLibrary::SearchForAddressOfSymbol("llvm_ifc_add_target_address");
+
+  if(callback == NULL) return NULL;
+
+  // We have to do this double cast because there is no other way in
+  // C++ to cast a void* to a function pointer. Presumably a function
+  // pointer may not be the same size as a data pointer, but we ignore
+  // that difficulty.
+  return reinterpret_cast<IFCCallbackFun>(reinterpret_cast<uintptr_t>(callback));
+}
+
 //==============================================================================
 // Listener Implementation
 //
-IFCProfileJITEventListener::IFCProfileJITEventListener() {}
+IFCProfileJITEventListener::IFCProfileJITEventListener() :
+  llvm_ifc_add_target_address(NULL), attemptedLookup(false){}
+
 IFCProfileJITEventListener::~IFCProfileJITEventListener() {}
 
-void IFCProfileJITEventListener::NotifyFunctionEmitted(
-                                  const Function &F,
-                                  void *Code, size_t Size,
-                                  const EmittedFunctionDetails &Details) {
-  DEBUG(dbgs() << "== Emitted Callback: " << F.getName() << " ==\n");
-  FunctionNumber fn = GetFunctionNumber(F);
-  DEBUG(dbgs() << "Function Number: " << fn << "\n");
-  // TODO: add callback to the profiling runtime registering this function
+////////////////////////////////////////////////////////////////////////////////
+// See if we can callback into the profiling runtime.
+// The profiling function will be dynamically linked from the profiling runtime
+// library.
+//
+bool IFCProfileJITEventListener::hasProfilingCallback() {
+  if(!attemptedLookup) {
+    attemptedLookup = true;
+    llvm_ifc_add_target_address = dynamicLookupCallbackFun();
+    if(llvm_ifc_add_target_address == NULL) {
+      DEBUG(dbgs() << "Could not find llvm_ifc_add_target_address function\n"
+            << "Did you run the JIT with the libprofile_rt loaded?\n");
+
+    }
+  }
+
+  return (llvm_ifc_add_target_address != NULL);
 }
 
-void IFCProfileJITEventListener::NotifyFreeingMachineCode(void *OldPtr) {
-  DEBUG(dbgs() << "Freeing Callback" << "\n");
+////////////////////////////////////////////////////////////////////////////////
+// Callback to the profiling runtime to record the mapping from
+// function stub address to the function number.
+//
+void IFCProfileJITEventListener::NotifyResolvedLazyStub(void *Stub,
+                                                        const Function& F,
+                                                        void *FunctionCode) {
+  if(!hasProfilingCallback()) return;
+
+  prof::FunctionNumber Fn = getFunctionNumber(F);
+  DEBUG(dbgs()
+        << "NotifyResolvedLazyStub Callback: "
+        << F.getName() << "@" << Stub << " = " << Fn << "\n");
+
+  llvm_ifc_add_target_address(Fn, Stub);
 }
 
 namespace llvm {
