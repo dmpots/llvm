@@ -13,27 +13,29 @@
 |*
 \*===----------------------------------------------------------------------===*/
 
-
 #include "Profiling.h"
 #include "llvm/IndirectFunctionCallProfiling.h"
 #include "llvm/Support/DataTypes.h"
 #include <iostream>
 #include <map>
 
-typedef void*    Address;
+
 using namespace llvm;
 
 namespace {
+  typedef void*    Address;
+
   class IFCProfiler {
   public:
     typedef uint64_t Counter;
-    typedef std::pair<prof::CallSiteNumber, prof::FunctionNumber> ProfileEntry;
+    typedef std::pair<prof::CallSiteNumber, Address> ProfileEntry;
     typedef std::map<ProfileEntry, Counter> ProfileMap;
     typedef std::map<Address, prof::FunctionNumber> TargetMap;
 
     void incrementTarget(prof::CallSiteNumber cs, Address target);
     void addTargetAddress(prof::FunctionNumber fn, Address addr);
-    inline ProfileMap &getCounts(){return Counts;}
+    inline ProfileMap &getCounts()   {return Counts;}
+    inline TargetMap  &getTargets()  {return Targets;}
 
   private:
     ProfileMap Counts;
@@ -45,32 +47,42 @@ static IFCProfiler profiler;
 static bool Init = false;
 
 //==============================================================================
+// Debugging Helpers
+//
+static void dumpProfileMap(IFCProfiler& profiler) {
+  for(IFCProfiler::ProfileMap::const_iterator
+        I = profiler.getCounts().begin(),
+        E = profiler.getCounts().end(); I != E; ++I) {
+
+    prof::FunctionNumber target = 0;
+    IFCProfiler::TargetMap::const_iterator T =
+      profiler.getTargets().find(I->first.second);
+    if(T != profiler.getTargets().end()) {
+      target = T->second;
+    }
+
+    std::cout << I->first.first  << " "
+              << target          << " "
+              << I->first.second << " "
+              << I->second       << "\n";
+  }
+}
+
+//==============================================================================
 // Profiler Implementation
 //
 void IFCProfiler::incrementTarget(prof::CallSiteNumber cs, Address addr) {
-  TargetMap::iterator I = Targets.find(addr);
-  prof::FunctionNumber target = 0;
-  if(I != Targets.end())
-    target = I->second;
-
-  ProfileEntry entry = std::make_pair(cs, target);
+  ProfileEntry entry = std::make_pair(cs, addr);
   Counts[entry]++;
 }
 
 void IFCProfiler::addTargetAddress(prof::FunctionNumber fn, Address addr) {
+  //std::cout << "Added " << fn << " => " << addr << "\n";
   Targets[addr] = fn;
 }
 
-
 static void IFCExitHandler(void) {
-  std::cerr << "Done!\n";
-  for(IFCProfiler::ProfileMap::iterator
-        I = profiler.getCounts().begin(),
-        E = profiler.getCounts().end(); I != E; ++I) {
-    std::cout << I->first.first  << " "
-              << I->first.second << " "
-              << I->second       << "\n";
-  }
+  dumpProfileMap(profiler);
 }
 
 //==============================================================================
