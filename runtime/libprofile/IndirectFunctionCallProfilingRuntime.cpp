@@ -43,8 +43,7 @@ namespace {
   };
 }
 
-static IFCProfiler profiler;
-static bool Init = false;
+static IFCProfiler *profiler;
 
 //==============================================================================
 // Debugging Helpers
@@ -82,7 +81,10 @@ void IFCProfiler::addTargetAddress(prof::FunctionNumber fn, Address addr) {
 }
 
 static void IFCExitHandler(void) {
-  dumpProfileMap(profiler);
+  if(profiler) {
+    dumpProfileMap(*profiler);
+    delete profiler;
+  }
 }
 
 //==============================================================================
@@ -90,13 +92,14 @@ static void IFCExitHandler(void) {
 //
 extern "C"
 void llvm_increment_indirect_target_count(prof::CallSiteNumber cs, Address addr) {
-  profiler.incrementTarget(cs, addr);
-  if(!Init){Init=true;atexit(IFCExitHandler);}
+  if(profiler)
+    profiler->incrementTarget(cs, addr);
 }
 
 extern "C"
 void llvm_ifc_add_target_address(prof::FunctionNumber fn, Address addr) {
-  profiler.addTargetAddress(fn, addr);
+  if(profiler)
+    profiler->addTargetAddress(fn, addr);
 }
 
 extern "C"
@@ -105,6 +108,7 @@ int llvm_start_indirect_function_call_profiling(int argc,
                                                 unsigned *_unused,
                                                 unsigned _unused2) {
   int Ret = save_arguments(argc, argv);
+  profiler = new IFCProfiler();
   atexit(IFCExitHandler);
   return Ret;
 }

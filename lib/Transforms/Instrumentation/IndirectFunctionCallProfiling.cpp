@@ -161,6 +161,14 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
     addIndirectCallInstrumentation(F);
   }
 
+  // Insert initialization call if we have a main function
+  Function *Main = M.getFunction("main");
+  if(Main) {
+    InsertProfilingInitCall(Main, "llvm_start_indirect_function_call_profiling",
+                            NULL, /* No constant array needed */
+                            NULL  /* No constant array type needed*/);
+  }
+
   return true;
 }
 
