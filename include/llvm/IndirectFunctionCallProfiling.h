@@ -24,6 +24,14 @@ namespace llvm {
     // Types
     typedef uint32_t FunctionNumber;
     typedef uint32_t CallSiteNumber;
+    typedef uint64_t BigCounter;
+
+    // Record structure that is written to the output file
+    struct IFCProfileRecord {
+      CallSiteNumber callsite;
+      FunctionNumber target;
+      BigCounter     count;
+    };
 
     // Functions
     bool isIndirectCall(const CallInst& call);
