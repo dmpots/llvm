@@ -200,6 +200,20 @@ namespace llvm {
   // information and prints it with -analyze.
   //
   FunctionPass *createMemDepPrinter();
+
+  //===--------------------------------------------------------------------===//
+  //
+  // createIndirectFunctionCallProfilerLoader - This pass loads
+  // information from an indirect function call profile dump file.
+  //
+  ModulePass *createIndirectFunctionCallProfileLoaderPass();
+
+  //===--------------------------------------------------------------------===//
+  //
+  // createNoIndirectFunctionCallProfileInfoPass - This pass
+  // implements the default "no indirect function call profile".
+  //
+  ImmutablePass *createNoIndirectFunctionCallProfileInfoPass();
 }
 
 #endif
