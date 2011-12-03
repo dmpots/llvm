@@ -28,9 +28,9 @@ namespace llvm {
 
     // Record structure that is written to the output file
     struct IFCProfileRecord {
-      CallSiteNumber callsite;
-      FunctionNumber target;
-      BigCounter     count;
+      CallSiteNumber CallSite;
+      FunctionNumber Target;
+      BigCounter     Count;
     };
 
     // Functions

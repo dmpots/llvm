@@ -160,9 +160,9 @@ void IFCProfiler::writeProfileRecord(int fd,
 
   // Write the record to the output file
   prof::IFCProfileRecord record;
-  record.callsite = entry.first;
-  record.target   = target;
-  record.count    = count;
+  record.CallSite = entry.first;
+  record.Target   = target;
+  record.Count    = count;
   if(write(fd, &record, sizeof(prof::IFCProfileRecord)) < 0) {
     std::cerr << "error: unable to write ifc entry to output file.\n";
     return;
