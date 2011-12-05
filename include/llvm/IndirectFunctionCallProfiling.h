@@ -35,6 +35,9 @@ namespace llvm {
 
     // Functions
     bool isIndirectCall(const CallInst& call);
+
+    // Data
+    static const FunctionNumber UnknownFunction = 0;
   }
 }
 #endif

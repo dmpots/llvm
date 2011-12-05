@@ -68,7 +68,7 @@ static void dumpProfileMap(IFCProfiler& profiler) {
         I = profiler.getCounts().begin(),
         E = profiler.getCounts().end(); I != E; ++I) {
 
-    prof::FunctionNumber target = 0;
+    prof::FunctionNumber target = prof::UnknownFunction;
     IFCProfiler::TargetMap::const_iterator T =
       profiler.getTargets().find(I->first.second);
     if(T != profiler.getTargets().end()) {
@@ -149,7 +149,7 @@ void IFCProfiler::writeProfileRecord(int fd,
                                      const ProfileEntry &entry,
                                      Counter count) {
   // See if we have a mapping for the target address
-  prof::FunctionNumber target = 0;
+  prof::FunctionNumber target = prof::UnknownFunction;
   TargetMap::const_iterator T = Targets.find(entry.second);
   if(T != Targets.end()) {
     target = T->second;
