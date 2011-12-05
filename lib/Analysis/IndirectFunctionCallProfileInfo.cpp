@@ -18,7 +18,6 @@
 
 #include "llvm/Analysis/IndirectFunctionCallProfileInfo.h"
 #include "llvm/Function.h"
-#include "llvm/IndirectFunctionCallProfiling.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
@@ -26,6 +25,7 @@
 #include "llvm/PassRegistry.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ProfileInfoTypes.h"
+#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -73,8 +73,6 @@ namespace {
     static char ID;
 
   private:
-    typedef std::vector<Function *> FunctionNumbering;
-    typedef std::vector<const CallInst *> CallSiteNumbering;
     typedef std::pair<prof::FunctionNumber, prof::BigCounter> CounterPair;
     typedef std::vector<CounterPair> CounterVec;
     typedef std::map<prof::CallSiteNumber, CounterVec> CounterMap;
@@ -87,9 +85,6 @@ namespace {
 
     // process profile info of a program from the input file
     void handleIFCProfileInfo(FILE*);
-
-    // compute the correct function and callsite numbers by walking the module
-    void computeFunctionAndCallSiteNumbers(Module&);
 
     // consolidate all the profiling entries into the profile map used by
     // clients of the analysis
@@ -111,8 +106,8 @@ namespace {
     Function *getFunction(prof::FunctionNumber);
 
     // Mapping of Function/CallSite numbers to the Function or CallInst object
-    FunctionNumbering Functions;
-    CallSiteNumbering Calls;
+    prof::FunctionNumbering Functions;
+    prof::CallSiteNumbering Calls;
 
     // Maps call site to all the counters recorded for that call site in the
     // profiling input file.
@@ -170,7 +165,7 @@ bool IndirectFunctionCallProfileLoader::runOnModule(Module& M) {
   // assume that we are given the same module that was used when inserting the
   // profiling callbacks otherwise the numbering we get from this module and the
   // numbering stored in the profiling data file will not match.
-  computeFunctionAndCallSiteNumbers(M);
+  prof::computeFunctionAndCallSiteNumbers(M, &Functions, &Calls);
 
   // Now that we have read all of the profile data we can process it into
   // CallSiteProfile records that will be consumed by clients
@@ -385,50 +380,6 @@ void IndirectFunctionCallProfileLoader::populateCallProfileMap() {
 
     // Finally sort the targets by percent in decreasing order
     std::sort(Targets.begin(), Targets.end(), sortTargetsByPercent);
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Indirect call predicate
-// TODO: would be nice to be able to share this among multiple libraries...
-//
-static bool isIndirectCall(const CallInst& call) {
-  // An indirect call will return NULL for the Function
-  if(call.getCalledFunction()) return false;
-
-
-  // Seems that intrinsic fucntions also return null for getCalledFunction
-  // try to filter them out by checking that we are not calling a global value.
-  if(isa<GlobalValue>(call.getCalledValue())) return false;
-
-  return true;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Compute the correct function and callsite numbers by walking the module
-//
-void
-IndirectFunctionCallProfileLoader::computeFunctionAndCallSiteNumbers(Module& M) {
-  // FunctionNumber and CallSiteNumber 0 is used to indicate an invalid value
-  assert((Functions.size() == 0) && (Calls.size() == 0) &&
-         "Functions and Calls should start out empty");
-  Functions.push_back(0);
-  Calls.push_back(0);
-
-  // Examine every function and callsite in the program
-  for(Module::iterator F = M.begin(), FE = M.end(); F!=FE; ++F) {
-    // Map this function to the current index at the end of the vector
-    Functions.push_back(F);
-    for(Function::iterator B = F->begin(), BE = F->end(); B!=BE; ++B){
-      for(BasicBlock::iterator I = B->begin(), IE = B->end(); I!=IE; ++I) {
-        CallInst *C = dyn_cast<CallInst>(I);
-        if(!C || !isIndirectCall(*C))
-          continue;
-
-        // Map this callsite to the current index at the end of the vector
-        Calls.push_back(C);
-      }
-    }
   }
 }
 

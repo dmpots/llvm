@@ -1,4 +1,4 @@
-//===- IndirectFunctionCallProfiling.h - Support for profiling -----------===//
+//===- IndirectFunctionCallProfilingSupport.h - Support for profiling -----===//
 //
 //                      The LLVM Compiler Infrastructure
 //
@@ -11,20 +11,25 @@
 // of a mismatch when generating and reading profile data. These definitions are
 // placed in a separate namespace to avoid polluting the general llvm namespace.
 // ===----------------------------------------------------------------------===//
-#ifndef LLVM_INDIRECT_FUNCTION_CALL_PROFILING_H
-#define LLVM_INDIRECT_FUNCTION_CALL_PROFILING_H
+#ifndef LLVM_PROFILE_INDIRECT_FUNCTION_CALL_PROFILING_SUPPORT_H
+#define LLVM_PROFILE_INDIRECT_FUNCTION_CALL_PROFILING_SUPPORT_H
 
 #include "llvm/Support/DataTypes.h"
+#include <vector>
 
 namespace llvm {
   class Instruction;
   class CallInst;
+  class Function;
+  class Module;
 
   namespace prof {
     // Types
     typedef uint32_t FunctionNumber;
     typedef uint32_t CallSiteNumber;
     typedef uint64_t BigCounter;
+    typedef std::vector<Function *> FunctionNumbering;
+    typedef std::vector<CallInst *> CallSiteNumbering;
 
     // Record structure that is written to the output file
     struct IFCProfileRecord {
@@ -35,7 +40,9 @@ namespace llvm {
 
     // Functions
     bool isIndirectCall(const CallInst& call);
-
+    void computeFunctionAndCallSiteNumbers(Module& M,
+                                           FunctionNumbering *Functions,
+                                           CallSiteNumbering *Calls);
     // Data
     static const FunctionNumber UnknownFunction = 0;
   }

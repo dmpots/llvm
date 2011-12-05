@@ -14,7 +14,7 @@
 \*===----------------------------------------------------------------------===*/
 
 #include "Profiling.h"
-#include "llvm/IndirectFunctionCallProfiling.h"
+#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
 #include "llvm/Support/DataTypes.h"
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
 #include <unistd.h>

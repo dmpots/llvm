@@ -1,4 +1,4 @@
-##===- lib/Makefile ----------------------------------------*- Makefile -*-===##
+##===- lib/Profile/Makefile -------------------------------*- Makefile -*-===##
 #
 #                     The LLVM Compiler Infrastructure
 #
@@ -6,12 +6,9 @@
 # License. See LICENSE.TXT for details.
 #
 ##===----------------------------------------------------------------------===##
-LEVEL = ..
 
-include $(LEVEL)/Makefile.config
-
-PARALLEL_DIRS := VMCore AsmParser Bitcode Archive Analysis Transforms CodeGen \
-                Target ExecutionEngine Linker MC Object DebugInfo Profile
+LEVEL = ../..
+LIBRARYNAME = LLVMProfile
+BUILD_ARCHIVE = 1
 
 include $(LEVEL)/Makefile.common
-

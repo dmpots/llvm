@@ -29,12 +29,12 @@
 
 #include "ProfilingUtils.h"
 #include "llvm/Constants.h"
-#include "llvm/IndirectFunctionCallProfiling.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/ADT/Statistic.h"
@@ -50,7 +50,7 @@ namespace {
     bool runOnModule(Module &M);
   public:
     static char ID; // Pass identification, replacement for typeid
-    IndirectFunctionCallProfiler() : ModulePass(ID), fn(1), cn(1) {
+    IndirectFunctionCallProfiler() : ModulePass(ID) {
       initializeIndirectFunctionCallProfilerPass(*PassRegistry::getPassRegistry());
     }
 
@@ -59,12 +59,10 @@ namespace {
     }
 
   private:
-    prof::FunctionNumber fn;
-    prof::CallSiteNumber cn;
     Constant *incrementTargetFunction; // profiling runtime function to call
 
-    void addFunctionNumberAnnotation(Function *F);
-    void addIndirectCallInstrumentation(Function *F);
+    void addFunctionNumberAnnotation(Function *, prof::FunctionNumber);
+    void addIndirectCallInstrumentation(CallInst *, prof::CallSiteNumber);
   };
 }
 
@@ -150,15 +148,22 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
                           Type::getInt8PtrTy(Context), // function address
                           NULL );
 
+  // Compute the function and call site numbers in a standard way so that when
+  // we read the module again we will always get the same numbering. This is
+  // important to ensure that we can match the numbers stored in the profile
+  // data file with the actual functions and callsites they represent.
+  prof::FunctionNumbering Functions;
+  prof::CallSiteNumbering Calls;
+  prof::computeFunctionAndCallSiteNumbers(M, &Functions, &Calls);
 
-  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
-    // Look at all the functions in the Module
-    Function *F = dyn_cast<Function>(I);
-    if(!F) continue;
-    if(F->isDeclaration()) continue;
+  // Add annotations to all the functions
+  for(prof::FunctionNumber FN = 1; FN < Functions.size(); ++FN) {
+    addFunctionNumberAnnotation(Functions[FN], FN);
+  }
 
-    addFunctionNumberAnnotation(F);
-    addIndirectCallInstrumentation(F);
+  // Add instrumentation callbacks to all the indirect call sites
+  for(prof::CallSiteNumber CS = 1; CS < Calls.size(); ++CS) {
+    addIndirectCallInstrumentation(Calls[CS], CS);
   }
 
   // Insert initialization call if we have a main function
@@ -177,14 +182,19 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
 /// Add a call to llvm.annotation.i32(fn, ".ibprofile.annotation", NULL, 0)
 /// that we can read later to get the function number for this function.
 ///
-void IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F) {
+void
+IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F,
+                                                          prof::FunctionNumber FN) {
+  assert(F && "Function should not be null");
+  if(F->isDeclaration()) return;
+
   // Add annotation to initial block
   Module *M = F->getParent();
   const BasicBlock::iterator I = F->getEntryBlock().getFirstInsertionPt();
   
   // Get function number as an i8* to pass to the annotation
   ConstantInt *FunctionNumberConst = 
-    ConstantInt::get(M->getContext(), APInt(32, fn++));
+    ConstantInt::get(M->getContext(), APInt(32, FN));
 
   PointerType* PointerTy_i8 = 
     PointerType::get(IntegerType::get(M->getContext(), 8), 0);
@@ -216,42 +226,29 @@ void IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F) {
   NumAnnotationsInserted++;
 }
 
-void IndirectFunctionCallProfiler::addIndirectCallInstrumentation(Function *F) {
+////////////////////////////////////////////////////////////////////////////////
+// Add a call to the profiling runtime passing the target of the indirect branch
+// The code inserted (marked with ***) will look something like:
+//
+//   target = ...
+//   *** llvm_increment_indirect_target_count(CN, target) ***
+//   target()
+//
+void
+IndirectFunctionCallProfiler::addIndirectCallInstrumentation(CallInst *C,
+                                                             prof::CallSiteNumber CN) {
+  assert(C && "Call site should not be null");
+  Function *F = C->getParent()->getParent();
   LLVMContext &Context = F->getContext();
 
-  for(Function::iterator B = F->begin(), BE = F->end(); B != BE; ++B) {
-    for(BasicBlock::iterator I = B->begin(), IE = B->end(); I != IE; ++I) {
+  // Prepare profiling call arguments
+  std::vector<Value*> args(2);
+  args[0] = ConstantInt::get(Type::getInt32Ty(F->getContext()), CN);
+  args[1] = CastInst::CreateTruncOrBitCast(C->getCalledValue(),
+                                           Type::getInt8PtrTy(Context),
+                                           "ifc.target", C);
 
-      CallInst *C = dyn_cast<CallInst>(I);
-      if(!C || !prof::isIndirectCall(*C))
-        continue;
-
-      // Always increment the callsite number so that we can easily recompute the
-      // numbering when we later read the profiling data without having to compute
-      //|| !prof::isIndirectCall(*C))
-
-      // Prepare profiling call arguments
-      std::vector<Value*> args(2);
-      args[0] = ConstantInt::get(Type::getInt32Ty(F->getContext()), cn++);
-      args[1] = CastInst::CreateTruncOrBitCast(C->getCalledValue(),
-                                               Type::getInt8PtrTy(Context),
-                                               "ifc.target", C);
-
-      // Insert the profiling call right before the indirect call
-      CallInst::Create(incrementTargetFunction, args, "", C);
-      ++NumCallsProfiled;
-    }
-  }
-}
-
-bool prof::isIndirectCall(const CallInst& call) {
-  // An indirect call will return NULL for the Function
-  if(call.getCalledFunction()) return false;
-
-
-  // Seems that intrinsic fucntions also return null for getCalledFunction
-  // try to filter them out by checking that we are not calling a global value.
-  if(isa<GlobalValue>(call.getCalledValue())) return false;
-
-  return true;
+  // Insert the profiling call right before the indirect call
+  CallInst::Create(incrementTargetFunction, args, "", C);
+  NumCallsProfiled++;
 }
