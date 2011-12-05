@@ -42,6 +42,7 @@ void llvm::initializeAnalysis(PassRegistry &Registry) {
   initializePostDomOnlyPrinterPass(Registry);
   initializeIVUsersPass(Registry);
   initializeIndirectFunctionCallProfileInfoAnalysisGroup(Registry);
+  initializeIndirectFunctionCallProfileLoaderPass(Registry);
   initializeInstCountPass(Registry);
   initializeIntervalPartitionPass(Registry);
   initializeLazyValueInfoPass(Registry);

@@ -113,6 +113,7 @@ void initializeIndVarSimplifyPass(PassRegistry&);
 void initializeIndirectFunctionCallProfilerPass(PassRegistry&);
 void initializeIndirectFunctionCallPromotionPass(PassRegistry&);
 void initializeIndirectFunctionCallProfileInfoAnalysisGroup(PassRegistry&);
+void initializeIndirectFunctionCallProfileLoaderPass(PassRegistry&);
 void initializeInstCombinerPass(PassRegistry&);
 void initializeInstCountPass(PassRegistry&);
 void initializeInstNamerPass(PassRegistry&);

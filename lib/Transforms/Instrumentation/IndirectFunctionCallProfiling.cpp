@@ -221,10 +221,14 @@ void IndirectFunctionCallProfiler::addIndirectCallInstrumentation(Function *F) {
 
   for(Function::iterator B = F->begin(), BE = F->end(); B != BE; ++B) {
     for(BasicBlock::iterator I = B->begin(), IE = B->end(); I != IE; ++I) {
-      // See if this is an indirect call
+
       CallInst *C = dyn_cast<CallInst>(I);
       if(!C || !prof::isIndirectCall(*C))
         continue;
+
+      // Always increment the callsite number so that we can easily recompute the
+      // numbering when we later read the profiling data without having to compute
+      //|| !prof::isIndirectCall(*C))
 
       // Prepare profiling call arguments
       std::vector<Value*> args(2);

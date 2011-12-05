@@ -17,6 +17,7 @@
 
 #include <vector>
 #include <map>
+#include <functional>
 
 namespace llvm {
 
@@ -26,6 +27,7 @@ class Function;
 /// A profiling record that stores the target function and the
 /// percent of the calls that went to the target.
 struct IFCTarget {
+  IFCTarget(Function *F, double P = 0.0) : Target(F), Percent(P) {}
   Function *Target;
   double   Percent;
 };
@@ -36,6 +38,9 @@ typedef std::vector<IFCTarget> CallSiteProfile;
 /// Holds profiling info obtained by indirect function call profiling
 class IndirectFunctionCallProfileInfo {
  public:
+  //========================== Types =================================//
+  typedef std::map<const CallInst *, CallSiteProfile> ProfileMap;
+
   //========================== Members ===============================//
   static char ID; // Class identification, replacement for typeinfo
   static const CallSiteProfile NoProfileInfo;
@@ -46,16 +51,29 @@ class IndirectFunctionCallProfileInfo {
 
   //========================== Methods ===============================//
   /// Returns the CallSiteInfo for the given call site.
-  virtual const CallSiteProfile& getCallSiteProfile(CallInst *) const;
+  virtual const CallSiteProfile& getCallSiteProfile(const CallInst *) const;
 
   /// Returns true if there is profiling info for this call site
-  virtual bool hasProfileInfo(CallInst *call) const;
+  virtual bool hasProfileInfo(const CallInst *call) const;
 
   /// Returns the most frequently taken target for this call site
-  virtual Function* getMostFrequentTarget(CallInst *call) const;
+  virtual Function* getMostFrequentTarget(const CallInst *call) const;
+
+  /// Returns a const reference to the underlying profile map. Useful
+  /// if you want to perform some action (such as iterating over all
+  /// call sites) not provided by the function-based convenience interface.
+  virtual const ProfileMap& getProfileMap() const;
+
+  // Predicate for testing equality of IFCTarget records by Function
+  // useful for using with the find_if stl algorithm.
+  class FunTarget_eq : public std::unary_function<Function*, bool> {
+    Function* _fn;
+  public:
+    explicit FunTarget_eq(Function* fn);
+    bool operator() (const IFCTarget& t);
+  };
 
  protected:
-  typedef std::map<CallInst *, CallSiteProfile> ProfileMap;
   ProfileMap CallProfileMap;
 };
 

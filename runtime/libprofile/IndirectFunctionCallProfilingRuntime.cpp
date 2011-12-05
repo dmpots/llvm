@@ -155,10 +155,12 @@ void IFCProfiler::writeProfileRecord(int fd,
     target = T->second;
   }
 
-  // The call targets an unknown function, so don't write a record
-  if(target == 0) return;
-
-  // Write the record to the output file
+  // The call might target an unknown function but we still want to write the
+  // record to the output file because we want to be able to determine the
+  // frequency with which a target is taken so we need to keep track of all the
+  // times we executed a particular callsite. So regardless of whether we know
+  // the function or not we write the record to the output now. The unknown
+  // target entries can be dropped later by the profile loader pass.
   prof::IFCProfileRecord record;
   record.CallSite = entry.first;
   record.Target   = target;
