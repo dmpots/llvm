@@ -367,7 +367,8 @@ void IndirectFunctionCallProfileLoader::populateCallProfileMap() {
              "Unexpected duplicate target function in CallProfile");
 
       // Insert the target into profile targets vector for this call site
-      Targets.push_back(IFCTarget(F, convertToDoubleWithOverflowCheck(Counter)));
+      double Percent = convertToDoubleWithOverflowCheck(Counter);
+      Targets.push_back(IFCTarget(F, Percent, Counter));
     }
 
     // Check to see that we have at least one known target. If not, then erase

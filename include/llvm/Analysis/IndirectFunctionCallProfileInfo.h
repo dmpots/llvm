@@ -15,6 +15,7 @@
 #ifndef LLVM_INDIRECT_FUNCTION_CALL_PROFILE_INFO_H
 #define LLVM_INDIRECT_FUNCTION_CALL_PROFILE_INFO_H
 
+#include "llvm/Support/DataTypes.h"
 #include <vector>
 #include <map>
 #include <functional>
@@ -24,12 +25,14 @@ namespace llvm {
 class CallInst;
 class Function;
 
-/// A profiling record that stores the target function and the
-/// percent of the calls that went to the target.
+/// A profiling record that stores the target function, the percent of the calls
+/// that went to the target and the number of times the target was taken.
 struct IFCTarget {
-  IFCTarget(Function *F, double P = 0.0) : Target(F), Percent(P) {}
-  Function *Target;
-  double   Percent;
+  IFCTarget(Function *F, double P = 0.0, double C = 0.0)
+    : Target(F), Percent(P), Count(C) {}
+  Function *Target; // Function target for the indirect call
+  double   Percent; // Times taken / Total times call site was executed
+  uint64_t Count;   // Raw count of times the target was taken
 };
 
 /// CallSiteProfile should store targets in order from most to least called
