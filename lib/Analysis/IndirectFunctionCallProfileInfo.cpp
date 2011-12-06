@@ -283,13 +283,19 @@ void IndirectFunctionCallProfileLoader::handleIFCProfileInfo(FILE* file) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // We have to take care that we don't overflow the double value when converting
-// from the 64-bit counter. We guard against this by checking for a negative
-// value when converting to a double and if we find one then we return the max
-// double value;
+// from the 64-bit counter. We guard against this by checking to see if the
+// counter is less than 2^52. Since a double has a mantissa of 52 bits (and an
+// exponent that can go far beyond 52), we can exactly represent any integer
+// value < 2^52. If the counter is greater than that value, we simply cap it at
+// the max double value.
 static double convertToDoubleWithOverflowCheck(prof::BigCounter Counter) {
-  double D = static_cast<double>(Counter);
-  if(D < 0.0) D = std::numeric_limits<double>::max();
-  return D;
+  static const prof::BigCounter MaxDoubleInteger(prof::BigCounter(1)<<52);
+  static const double MaxDouble = std::numeric_limits<double>::max();
+
+  if(Counter < MaxDoubleInteger) {
+    return static_cast<double>(Counter);
+  }
+  return MaxDouble;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
