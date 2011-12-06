@@ -13,6 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "llvm-prof"
+#include "llvm/Instructions.h"
 #include "llvm/InstrTypes.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
@@ -20,9 +22,11 @@
 #include "llvm/Assembly/AssemblyAnnotationWriter.h"
 #include "llvm/Analysis/ProfileInfo.h"
 #include "llvm/Analysis/ProfileInfoLoader.h"
+#include "llvm/Analysis/IndirectFunctionCallProfileInfo.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -32,12 +36,16 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/system_error.h"
 #include <algorithm>
+#include <iostream>
 #include <iomanip>
 #include <map>
 #include <set>
 
 using namespace llvm;
 
+//----------------------------------------------------------------------------//
+//===--------------------- Command Line Arguments -------------------------===//
+//----------------------------------------------------------------------------//
 namespace {
   cl::opt<std::string>
   BitcodeFile(cl::Positional, cl::desc("<program bitcode file>"),
@@ -55,6 +63,17 @@ namespace {
   cl::opt<bool>
   PrintAllCode("print-all-code",
                cl::desc("Print annotated code for the entire program"));
+
+  // Type of data stored in the profile input file
+  enum ProfileTypes {
+    EdgeProfileType
+  , IFCProfileType
+  };
+  cl::opt<ProfileTypes>
+  ProfileType("profile-type", cl::desc("Profiling data file type:"),
+    cl::values(clEnumValN(EdgeProfileType,"edge","Edge/basic Block profile"),
+               clEnumValN(IFCProfileType,"ifc","Indirect function call profile"),
+               clEnumValEnd));
 }
 
 // PairSecondSort - A sorting predicate to sort by the second element of a pair.
@@ -73,6 +92,9 @@ static double ignoreMissing(double w) {
   return w;
 }
 
+//----------------------------------------------------------------------------//
+//===------------------ Edge/Basic Block Profiles -------------------------===//
+//----------------------------------------------------------------------------//
 namespace {
   class ProfileAnnotator : public AssemblyAnnotationWriter {
     ProfileInfo &PI;
@@ -252,6 +274,134 @@ bool ProfileInfoPrinterPass::runOnModule(Module &M) {
   return false;
 }
 
+//----------------------------------------------------------------------------//
+//===--------------- Indirect Function Call Profiles ----------------------===//
+//----------------------------------------------------------------------------//
+namespace {
+  class IFCProfileAnnotator : public AssemblyAnnotationWriter {
+    IndirectFunctionCallProfileInfo &PI;
+  public:
+    IFCProfileAnnotator(IndirectFunctionCallProfileInfo &pi) : PI(pi) {}
+    void emitInstructionAnnot(const Instruction *, formatted_raw_ostream &);
+  };
+}
+
+void IFCProfileAnnotator::
+emitInstructionAnnot(const Instruction *I, formatted_raw_ostream& OS) {
+  const CallInst *Call = dyn_cast<CallInst>(I);
+  if(Call && PI.hasProfileInfo(Call)) {
+    OS << ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n";
+    OS << ";;; Indirect Targets:\n";
+    const CallSiteProfile &Targets = PI.getCallSiteProfile(Call);
+    for(CallSiteProfile::const_iterator T = Targets.begin(), TE = Targets.end();
+        T!=TE; ++T) {
+      const std::string &TargetName = T->Target->getName().str();
+      OS << ";;;\t"
+         << "@"  << TargetName
+         << " "  << format("%3.2f", 100.0 * T->Percent) << "%"
+         << " (" << T->Count << " times)\n";
+    }
+    OS << ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n";
+  }
+}
+
+namespace {
+  /// IFCProfileInfoPrinterPass - Helper pass to dump the ifc profile
+  /// information for a module.
+  //
+  class IFCProfileInfoPrinterPass : public ModulePass {
+  public:
+    static char ID; // Class identification, replacement for typeinfo.
+    IFCProfileInfoPrinterPass() : ModulePass(ID) {}
+
+    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+      AU.setPreservesAll();
+      AU.addRequired<IndirectFunctionCallProfileInfo>();
+    }
+
+    // the full name of the printer pass
+    virtual const char* getPassName() const {
+      return "IFC Profiling Information Printer";
+    }
+
+    bool runOnModule(Module &M);
+  };
+}
+
+char IFCProfileInfoPrinterPass::ID = 0;
+bool IFCProfileInfoPrinterPass::runOnModule(Module& M) {
+  IndirectFunctionCallProfileInfo &PI =
+    getAnalysis<IndirectFunctionCallProfileInfo>();
+  DEBUG(dbgs() << "IFC Profiling info has entries for "
+        << PI.getProfileMap().size() <<" call sites\n");
+
+  typedef std::vector<CallInst *> CallVec;
+  typedef std::map<Function*, CallVec> FunctionProfileMap;
+  FunctionProfileMap Map;
+
+  // Run through the module and collect all the callsites for which we have
+  // profiling info
+  int NumCallSites = 0;
+  for (Module::iterator F = M.begin(), FE = M.end(); F != FE; ++F) {
+    for (Function::iterator BB = F->begin(), BBE = F->end(); BB != BBE; ++BB) {
+      for(BasicBlock::iterator I = BB->begin(), IE = BB->end(); I!=IE; ++I) {
+        CallInst *C = dyn_cast<CallInst>(&*I);
+        if(!C) continue;
+
+        if(PI.hasProfileInfo(C)) {
+          NumCallSites++;
+          Map[F].push_back(C);
+        }
+      }
+    }
+  }
+
+  DEBUG(dbgs() << "Processing " << NumCallSites << " call sites in "
+        << Map.size() << " functions\n");
+
+  // Print out all the call sites we found with profiling info
+  for(FunctionProfileMap::iterator I = Map.begin(), E = Map.end(); I!=E; ++I) {
+    Function *F = I->first;
+    CallVec &Calls = I->second;
+    outs() << F->getName() << ":\n";
+    for(CallVec::iterator C = Calls.begin(), CE = Calls.end(); C!=CE; ++C) {
+      outs() << " @BB_" << (*C)->getParent()->getName() << "\n";
+      const CallSiteProfile &Targets = PI.getCallSiteProfile(*C);
+      for(CallSiteProfile::const_iterator T = Targets.begin(), TE = Targets.end();
+          T!=TE; ++T){
+        const std::string &CalledValue= (*C)->getCalledValue()->getName().str();
+        const std::string &TargetName = T->Target->getName().str();
+        std::cout << "    "
+                  << std::setw(20) << std::right << CalledValue  << "() => "
+                  << std::setw(30) << std::left  << TargetName   << " "
+                  << std::setw(6)  << std::right << std::setprecision(2)
+                  << std::fixed    << (100 * T->Percent) << "%"
+                  << " ("<<T->Count<< ")" << "\n";
+      }
+    }
+    outs() << "\n";
+  }
+
+  // Print the annotated llvm if requested
+  if (PrintAnnotatedLLVM) {
+    outs() << "\n===" << std::string(73, '-') << "===\n";
+    outs() << "Annotated LLVM code for the module:\n\n";
+
+    IFCProfileAnnotator PA(PI);
+    if(PrintAllCode) M.print(outs(), &PA);
+    else {
+      for(FunctionProfileMap::iterator I = Map.begin(), E = Map.end(); I!=E; ++I) {
+        Function *F = I->first;
+        F->print(outs(), &PA);
+      }
+    }
+  }
+  return false;
+}
+
+//----------------------------------------------------------------------------//
+//===----------------------- Main Entry Point -----------------------------===//
+//----------------------------------------------------------------------------//
 int main(int argc, char **argv) {
   // Print a stack trace if we signal out.
   sys::PrintStackTraceOnErrorSignal();
@@ -277,16 +427,32 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Read the profiling information. This is redundant since we load it again
-  // using the standard profile info provider pass, but for now this gives us
-  // access to additional information not exposed via the ProfileInfo
-  // interface.
-  ProfileInfoLoader PIL(argv[0], ProfileDataFile, *M);
+  // Initialize passes
+  PassRegistry &Registry = *PassRegistry::getPassRegistry();
+  initializeAnalysis(Registry);
 
   // Run the printer pass.
   PassManager PassMgr;
-  PassMgr.add(createProfileLoaderPass(ProfileDataFile));
-  PassMgr.add(new ProfileInfoPrinterPass(PIL));
+
+  switch(ProfileType) {
+  case EdgeProfileType:{
+    // Read the profiling information. This is redundant since we load it again
+    // using the standard profile info provider pass, but for now this gives us
+    // access to additional information not exposed via the ProfileInfo
+    // interface.
+    ProfileInfoLoader *PIL = new ProfileInfoLoader(argv[0], ProfileDataFile, *M);
+    PassMgr.add(createProfileLoaderPass(ProfileDataFile));
+    PassMgr.add(new ProfileInfoPrinterPass(*PIL));
+    break;
+  }
+  case IFCProfileType:
+    PassMgr.add(createIndirectFunctionCallProfileLoaderPass());
+    PassMgr.add(new IFCProfileInfoPrinterPass());
+    break;
+  default:
+    errs() << "Unknown profile type: " << ProfileType;
+  }
+
   PassMgr.run(*M);
 
   return 0;
