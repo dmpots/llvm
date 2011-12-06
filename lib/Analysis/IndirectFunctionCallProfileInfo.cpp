@@ -37,6 +37,7 @@
 using namespace llvm;
 
 STATISTIC(sNumProfileEntries,    "The # of profile entries read.");
+STATISTIC(sNumUnknownTargets,    "The # of unknown (external) function targets");
 STATISTIC(sNumProfileRuns,       "The # of profile runs read.");
 
 namespace {
@@ -356,7 +357,7 @@ void IndirectFunctionCallProfileLoader::populateCallProfileMap() {
       Function *F = getFunction(FN);
       assert((FN == prof::UnknownFunction || F) &&
              "Only unknown function number should not have a corresponding function.");
-      if(!F) continue;
+      if(!F) {++sNumUnknownTargets; continue;}
 
       // Make sure this target only appears once in the profile list for this
       // call site. We should never have multiple entries for the same function
