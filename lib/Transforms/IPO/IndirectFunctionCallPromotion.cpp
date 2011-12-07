@@ -22,11 +22,14 @@
 #include "llvm/Pass.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/IndirectFunctionCallProfileInfo.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include <set>
+
 using namespace llvm;
 
 STATISTIC(NumPromotions, "Number of functions promoted");
@@ -43,13 +46,16 @@ namespace {
     // run - Do the IFCP pass on the specified module
     //
     bool runOnModule(Module &M);
+    void getAnalysisUsage(AnalysisUsage &AU) const;
     
   private:
     typedef std::vector<Function *> TargetList;
     typedef std::pair<CallInst *, TargetList *> PromotionCandidate;
-    typedef std::vector<PromotionCandidate> PromotionSet;
+    typedef std::vector<PromotionCandidate> PromotionList;
 
-    void findPromotionCandidates(Module *M, PromotionSet *toPromote);
+    void findPromotionCandidates(Module *M,
+                                 PromotionList *toPromote,
+                                 const IndirectFunctionCallProfileInfo &PI);
     void promoteIndirectCall(const PromotionCandidate& candidate);
   };
 
@@ -68,27 +74,29 @@ ModulePass *llvm::createIndirectFunctionCallPromotionPass() {
 }
 
 //==============================================================================
-// Helper Functions
-//
-static bool isIndirectCall(const CallInst& call) {
-  // An indirect call will return NULL for the Function
-  return call.getCalledFunction();
-}
-
-//==============================================================================
 // IFCP Implementation
 //
 bool IFCP::runOnModule(Module &M) {
-  PromotionSet toPromote;
-  findPromotionCandidates(&M, &toPromote);
+  PromotionList toPromote;
+  const IndirectFunctionCallProfileInfo &PI =
+    getAnalysis<IndirectFunctionCallProfileInfo>();
+  findPromotionCandidates(&M, &toPromote, PI);
 
-  for(PromotionSet::iterator I = toPromote.begin(), E = toPromote.end(); I != E; ++I) {
+  for(PromotionList::iterator I = toPromote.begin(), E = toPromote.end(); I != E; ++I) {
     NumPromotions++;
-    DEBUG(dbgs() << "Promoting Function Call: " << *I->first << "\n");
     promoteIndirectCall(*I);
+
+    // Free temporary memory allocated in this pass for the TargetList
+    delete I->second;
+    I->second = NULL;
   }
-  
-  return true;
+
+  // return true if we inserted any promotions
+  return (NumPromotions > 0);
+}
+
+void IFCP::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<IndirectFunctionCallProfileInfo>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,7 +105,13 @@ bool IFCP::runOnModule(Module &M) {
 /// We use profiling information to find indirect calls that we have seen in a
 /// profile run and have recorded some targets of the indirect call.
 ///
-void IFCP::findPromotionCandidates(Module *M, PromotionSet *toPromote){
+void IFCP::findPromotionCandidates
+(Module *M,
+ PromotionList *toPromote,
+ const IndirectFunctionCallProfileInfo &ProfileInfo)
+{
+  const double PromotionThreshold = 0.30;
+
   // Loop over the module, looking for indirect function calls
   for (Module::iterator I = M->begin(), E = M->end(); I != E; ++I) {
     
@@ -110,24 +124,40 @@ void IFCP::findPromotionCandidates(Module *M, PromotionSet *toPromote){
     for (Function::iterator b = F->begin(), be = F->end(); b != be; ++b) {
       for (BasicBlock::iterator i = b->begin(), ie = b->end(); i != ie; ++i) {
         if (CallInst* call = dyn_cast<CallInst>(&*i)) {
-          // Skip over direct function calls and non-tail calls
-          if(isIndirectCall(*call) || !call->isTailCall())
+          // skip over any call sites where we don't have profiling info
+          if(!ProfileInfo.hasProfileInfo(call))
             continue;
 
-          // Get the defintion location for the indirect call
-          Instruction *target = dyn_cast<Instruction>(call->getCalledValue());
-          if(!target) continue;
-
-          DEBUG(dbgs() 
-                << "Indirect Tail Call in Function: " << F->getName() << " "
-                << "to value: " << target->getName()
-                << "\n");
+          // skip over non-tail calls we do this so that the promotion
+          // transformation is easy to manage. With a tail call we can simply
+          // place the target test at the end of the block. If the call was a
+          // non-tail call then we would have to clone the remaninder of the
+          // block after the indirect call when creating the new direct call.
+          if(!call->isTailCall())
+            continue;
           
-          // Decide if we can try to promote this function
-          // TODO: read profile info to see if we know any targets
-          if(target->getName() == "ln1L9"){
-            TargetList *targets = new TargetList(1, M->getFunction("s1C0_entry"));
-            toPromote->push_back(make_pair(call, targets));
+          // Decide if we want to promote this function call and which targets
+          // we should include in the promotion
+          TargetList *Promotions = new TargetList();
+          const CallSiteProfile& ProfileTargets =
+            ProfileInfo.getCallSiteProfile(call);
+
+          // Go through all potential targets and pick the ones that meet the
+          // threshold
+          for(CallSiteProfile::const_iterator T = ProfileTargets.begin(),
+                TE = ProfileTargets.end(); T!=TE; ++T) {
+            if(T->Percent >= PromotionThreshold) {
+              Promotions->push_back(T->Target);
+            }
+          }
+
+          // Add an entry to the promotions list for this call site if we have
+          // any "good" targets.
+          if(Promotions->size() == 0) {
+            delete Promotions;
+          }
+          else {
+            toPromote->push_back(make_pair(call, Promotions));
           }
         }
       }
@@ -146,7 +176,13 @@ void IFCP::findPromotionCandidates(Module *M, PromotionSet *toPromote){
 void IFCP::promoteIndirectCall(const PromotionCandidate& candidate) {
   // Pull apart the candidate and set some useful top level values
   CallInst *call = candidate.first;
-  TargetList *targets = candidate.second;
+  const TargetList *targets = candidate.second;
+
+  DEBUG(dbgs()
+        << "Promoting call " << call->getCalledValue()->getName() << "() "
+        << "in function @" <<call->getParent()->getParent()->getName()
+        << " with " << targets->size() << " targets\n");
+
   BasicBlock *BB = call->getParent();
   Function *F = BB->getParent();
   LLVMContext &C = F->getContext();
