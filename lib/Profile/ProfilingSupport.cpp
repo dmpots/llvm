@@ -1,4 +1,4 @@
-//===- IndirectFunctionCallProfiling.cpp ----------------------*- C++ -*---===//
+//===- ProfilingSupport.cpp -----------------------------------*- C++ -*---===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
+#include "llvm/Profile/ProfilingSupport.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"

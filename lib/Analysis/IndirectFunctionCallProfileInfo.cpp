@@ -25,7 +25,7 @@
 #include "llvm/PassRegistry.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ProfileInfoTypes.h"
-#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
+#include "llvm/Profile/ProfilingSupport.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"

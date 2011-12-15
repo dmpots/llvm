@@ -34,7 +34,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
+#include "llvm/Profile/ProfilingSupport.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/ADT/Statistic.h"

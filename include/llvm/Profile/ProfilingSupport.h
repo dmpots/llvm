@@ -1,4 +1,4 @@
-//===- IndirectFunctionCallProfilingSupport.h - Support for profiling -----===//
+//===- ProfilingSupport.h - Support for profiling -------------------------===//
 //
 //                      The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 // of a mismatch when generating and reading profile data. These definitions are
 // placed in a separate namespace to avoid polluting the general llvm namespace.
 // ===----------------------------------------------------------------------===//
-#ifndef LLVM_PROFILE_INDIRECT_FUNCTION_CALL_PROFILING_SUPPORT_H
-#define LLVM_PROFILE_INDIRECT_FUNCTION_CALL_PROFILING_SUPPORT_H
+#ifndef LLVM_PROFILE_PROFILING_SUPPORT_H
+#define LLVM_PROFILE_PROFILING_SUPPORT_H
 
 #include "llvm/Support/DataTypes.h"
 #include <vector>
@@ -27,6 +27,7 @@ namespace llvm {
     // Types
     typedef uint32_t FunctionNumber;
     typedef uint32_t CallSiteNumber;
+    typedef uint32_t BasicBlockNumber;
     typedef uint64_t BigCounter;
     typedef std::vector<Function *> FunctionNumbering;
     typedef std::vector<CallInst *> CallSiteNumbering;

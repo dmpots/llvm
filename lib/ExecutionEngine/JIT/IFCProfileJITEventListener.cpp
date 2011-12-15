@@ -37,7 +37,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
-#include "llvm/Profile/IndirectFunctionCallProfilingSupport.h"
+#include "llvm/Profile/ProfilingSupport.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/raw_ostream.h"
