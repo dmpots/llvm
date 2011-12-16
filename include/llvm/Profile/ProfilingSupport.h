@@ -1,4 +1,5 @@
 //===- ProfilingSupport.h - Support for profiling -------------------------===//
+
 //
 //                      The LLVM Compiler Infrastructure
 //
@@ -44,6 +45,10 @@ namespace llvm {
     void computeFunctionAndCallSiteNumbers(Module& M,
                                            FunctionNumbering *Functions,
                                            CallSiteNumbering *Calls);
+
+    /// Insert an llvm.annotation to record the function number of the function
+    void addFunctionNumberAnnotation(Function *F, FunctionNumber FN);
+
     // Data
     static const FunctionNumber UnknownFunction = 0;
   }

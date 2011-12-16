@@ -42,7 +42,6 @@
 
 using namespace llvm;
 
-STATISTIC(NumAnnotationsInserted, "The # of function number annotations inserted.");
 STATISTIC(NumCallsProfiled,       "The # of indirect calls profiled.");
 
 namespace {
@@ -61,7 +60,6 @@ namespace {
   private:
     Constant *incrementTargetFunction; // profiling runtime function to call
 
-    void addFunctionNumberAnnotation(Function *, prof::FunctionNumber);
     void addIndirectCallInstrumentation(CallInst *, prof::CallSiteNumber);
   };
 }
@@ -73,56 +71,6 @@ char IndirectFunctionCallProfiler::ID = 0;
 INITIALIZE_PASS(IndirectFunctionCallProfiler, "insert-ifc-profiling",
                 "Insert instrumentation for indirect function call profiling",
                 false, false)
-
-//==============================================================================
-// Helper Functions
-//
-static const char annotationVarName[] = "ifc.profiling.annotation";
-static const char annotationKey[]     = "ifc.key";
-static const char annotationFunName[] = "llvm.var.annotation";
-static GlobalVariable* getAnnotationString(Module* M) {
-  GlobalVariable *A = 
-    M->getGlobalVariable(annotationVarName, true /* allow local */);
-
-  if(!A) {
-    //ArrayType *T = ArrayType::get(IntegerType::get(M->getContext(), 8), 
-    //                              annotationVarName.size());
-    Constant *S = ConstantArray::get(M->getContext(), annotationKey);
-    A = new GlobalVariable(/*Module=*/*M, 
-                           /*Type=*/S->getType(),
-                           /*isConstant=*/true,
-                           /*Linkage=*/GlobalValue::PrivateLinkage,
-                           /*Initializer=*/S,
-                           /*Name=*/annotationVarName);
-    
-  }
-
-  return A;
-}
-
-static Function* getAnnotationFunction(Module *M) {
-  Function* F = M->getFunction(annotationFunName);
-  if (!F) {
-    PointerType* PointerTy_i8 = 
-      PointerType::get(IntegerType::get(M->getContext(), 8), 0);
-    std::vector<Type*>F_args;
-    //F_args.push_back(IntegerType::get(M->getContext(), 32));
-    F_args.push_back(PointerTy_i8);
-    F_args.push_back(PointerTy_i8);
-    F_args.push_back(PointerTy_i8);
-    F_args.push_back(IntegerType::get(M->getContext(), 32));
-    FunctionType* FTy = 
-      FunctionType::get(/*Result=*/Type::getVoidTy(M->getContext()),
-                        /*Params=*/F_args,
-                        /*isVarArg=*/false);
-
-    F = Function::Create(/*Type=*/FTy,
-                         /*Linkage=*/GlobalValue::ExternalLinkage,
-                         /*Name=*/annotationFunName, M); // (external, no body)
-    F->setCallingConv(CallingConv::C);
- }
-  return F;
-}
 
 //==============================================================================
 // Pass Implementation
@@ -158,7 +106,7 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
 
   // Add annotations to all the functions
   for(prof::FunctionNumber FN = 1; FN < Functions.size(); ++FN) {
-    addFunctionNumberAnnotation(Functions[FN], FN);
+    prof::addFunctionNumberAnnotation(Functions[FN], FN);
   }
 
   // Add instrumentation callbacks to all the indirect call sites
@@ -177,54 +125,6 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
   return true;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-/// Add a call to llvm.annotation.i32(fn, ".ibprofile.annotation", NULL, 0)
-/// that we can read later to get the function number for this function.
-///
-void
-IndirectFunctionCallProfiler::addFunctionNumberAnnotation(Function *F,
-                                                          prof::FunctionNumber FN) {
-  assert(F && "Function should not be null");
-  if(F->isDeclaration()) return;
-
-  // Add annotation to initial block
-  Module *M = F->getParent();
-  const BasicBlock::iterator I = F->getEntryBlock().getFirstInsertionPt();
-  
-  // Get function number as an i8* to pass to the annotation
-  ConstantInt *FunctionNumberConst = 
-    ConstantInt::get(M->getContext(), APInt(32, FN));
-
-  PointerType* PointerTy_i8 = 
-    PointerType::get(IntegerType::get(M->getContext(), 8), 0);
-  Constant *FunctionNumber = 
-    ConstantExpr::getIntToPtr(FunctionNumberConst, PointerTy_i8);
-
-  // Get annotation function and string identifier
-  Function    *AnnF = getAnnotationFunction(M);
-  GlobalValue *AnnS = getAnnotationString(M);
-
-  // Create call paramaters
-  ConstantInt* constInt_0 = ConstantInt::get(M->getContext(), APInt(32, 0));
-  std::vector<Constant*> annStrIndices;
-  annStrIndices.push_back(constInt_0);
-  annStrIndices.push_back(constInt_0);
-  Constant* annStrPtr = ConstantExpr::getGetElementPtr(AnnS, annStrIndices);
-  
-  // Create call param vector
-  std::vector<Value*> annParams;
-  annParams.push_back(FunctionNumber); // the annotation value
-  annParams.push_back(annStrPtr);      // identifier for the annotation
-  annParams.push_back(annStrPtr);      // not used so just reuse string
-  annParams.push_back(constInt_0);     // not used so just set to 0
-
-  // Create and insert annotation call
-  CallInst* ann = CallInst::Create(AnnF, annParams, "", I);
-  ann->setCallingConv(CallingConv::C);
-  ann->setTailCall(false);
-  NumAnnotationsInserted++;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Add a call to the profiling runtime passing the target of the indirect branch
