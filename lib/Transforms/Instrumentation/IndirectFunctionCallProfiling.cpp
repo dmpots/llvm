@@ -102,7 +102,7 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
   // data file with the actual functions and callsites they represent.
   prof::FunctionNumbering Functions;
   prof::CallSiteNumbering Calls;
-  prof::computeFunctionAndCallSiteNumbers(M, &Functions, &Calls);
+  prof::computeNumbering(M, &Functions, NULL/*No BlockNumbering*/, &Calls);
 
   // Add annotations to all the functions
   for(prof::FunctionNumber FN = 1; FN < Functions.size(); ++FN) {

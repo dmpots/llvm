@@ -21,6 +21,7 @@
 namespace llvm {
   class Instruction;
   class CallInst;
+  class BasicBlock;
   class Function;
   class Module;
 
@@ -30,8 +31,9 @@ namespace llvm {
     typedef uint32_t CallSiteNumber;
     typedef uint32_t BasicBlockNumber;
     typedef uint64_t BigCounter;
-    typedef std::vector<Function *> FunctionNumbering;
-    typedef std::vector<CallInst *> CallSiteNumbering;
+    typedef std::vector<Function *>  FunctionNumbering;
+    typedef std::vector<CallInst *>  CallSiteNumbering;
+    typedef std::vector<BasicBlock*> BasicBlockNumbering;
 
     // Record structure that is written to the output file
     struct IFCProfileRecord {
@@ -42,9 +44,17 @@ namespace llvm {
 
     // Functions
     bool isIndirectCall(const CallInst& call);
-    void computeFunctionAndCallSiteNumbers(Module& M,
-                                           FunctionNumbering *Functions,
-                                           CallSiteNumbering *Calls);
+    void computeFunctionNumbering(Module& M, FunctionNumbering *Functions);
+    void computeCallSiteNumbering(Module& M, CallSiteNumbering *Calls);
+    void computeBasicBlockNumbering(Module& M, BasicBlockNumbering *Blocks);
+
+    /// Compute all numberings in one walk over the module. Any combination of
+    /// the numberings can also be computed by passing NULL for the numberings that
+    /// should be skipped.
+    void computeNumbering(Module& M,
+                          FunctionNumbering   *Functions,
+                          BasicBlockNumbering *Blocks,
+                          CallSiteNumbering   *Calls);
 
     /// Insert an llvm.annotation to record the function number of the function
     void addFunctionNumberAnnotation(Function *F, FunctionNumber FN);

@@ -34,22 +34,33 @@ bool prof::isIndirectCall(const CallInst& call) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Compute the correct function and callsite numbers by walking the module
+// Compute the correct function, block, and callsite numbers by walking the module
 //
-void prof::computeFunctionAndCallSiteNumbers(Module& M,
-                                             FunctionNumbering *Functions,
-                                             CallSiteNumbering *Calls) {
-  // FunctionNumber and CallSiteNumber 0 is used to indicate an invalid value
-  assert((Functions->size() == 0) && (Calls->size() == 0) &&
-         "Functions and Calls should start out empty");
-  Functions->push_back(0);
-  Calls->push_back(0);
+void prof::computeNumbering(Module& M,
+                            FunctionNumbering   *Functions,
+                            BasicBlockNumbering *Blocks,
+                            CallSiteNumbering   *Calls) {
+  // Number 0 is used to indicate an invalid value
+  assert((Functions == NULL || (Functions->size() == 0)) &&
+         (Blocks    == NULL || (Blocks->size()    == 0)) &&
+         (Calls     == NULL || (Calls->size()     == 0)) &&
+         "Functions Blocks and Calls should start out empty");
+
+  if(Functions) Functions->push_back(0);
+  if(Blocks)    Blocks->push_back(0);
+  if(Calls)     Calls->push_back(0);
 
   // Examine every function and callsite in the program
   for(Module::iterator F = M.begin(), FE = M.end(); F!=FE; ++F) {
     // Map this function to the current index at the end of the vector
-    Functions->push_back(F);
+    if(Functions) Functions->push_back(F);
+
+    // No need to traverse the function if we are not numbering anything else
+    if(!Blocks && !Calls) continue;
+
     for(Function::iterator B = F->begin(), BE = F->end(); B!=BE; ++B){
+      if(Blocks) Blocks->push_back(B);
+      if(!Calls) continue;
       for(BasicBlock::iterator I = B->begin(), IE = B->end(); I!=IE; ++I) {
         CallInst *C = dyn_cast<CallInst>(I);
         if(!C || !isIndirectCall(*C))
@@ -60,6 +71,16 @@ void prof::computeFunctionAndCallSiteNumbers(Module& M,
       }
     }
   }
+}
+
+void prof::computeFunctionNumbering(Module& M, FunctionNumbering *Functions) {
+  computeNumbering(M, Functions, NULL, NULL);
+}
+void prof::computeBasicBlockNumbering(Module& M, BasicBlockNumbering *Blocks) {
+  computeNumbering(M, NULL, Blocks, NULL);
+}
+void prof::computeCallSiteNumbering(Module& M, CallSiteNumbering *Calls) {
+ computeNumbering(M, NULL, NULL, Calls);
 }
 
 //==============================================================================

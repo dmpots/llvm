@@ -166,7 +166,7 @@ bool IndirectFunctionCallProfileLoader::runOnModule(Module& M) {
   // assume that we are given the same module that was used when inserting the
   // profiling callbacks otherwise the numbering we get from this module and the
   // numbering stored in the profiling data file will not match.
-  prof::computeFunctionAndCallSiteNumbers(M, &Functions, &Calls);
+  prof::computeNumbering(M, &Functions, NULL, &Calls);
 
   // Now that we have read all of the profile data we can process it into
   // CallSiteProfile records that will be consumed by clients
