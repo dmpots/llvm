@@ -111,7 +111,9 @@ bool IndirectFunctionCallProfiler::runOnModule(Module &M) {
 
   // Add instrumentation callbacks to all the indirect call sites
   for(prof::CallSiteNumber CS = 1; CS < Calls.size(); ++CS) {
-    addIndirectCallInstrumentation(Calls[CS], CS);
+    CallInst *CallSite = Calls[CS];
+    if(prof::isIndirectCall(*CallSite))
+      addIndirectCallInstrumentation(CallSite, CS);
   }
 
   // Insert initialization call if we have a main function

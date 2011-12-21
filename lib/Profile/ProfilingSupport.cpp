@@ -63,7 +63,7 @@ void prof::computeNumbering(Module& M,
       if(!Calls) continue;
       for(BasicBlock::iterator I = B->begin(), IE = B->end(); I!=IE; ++I) {
         CallInst *C = dyn_cast<CallInst>(I);
-        if(!C || !isIndirectCall(*C))
+        if(!C)
           continue;
 
         // Map this callsite to the current index at the end of the vector
