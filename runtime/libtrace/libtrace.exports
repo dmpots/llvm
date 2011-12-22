@@ -1,0 +1,6 @@
+llvm_start_trace_runtime
+llvm_tracer_trace_head
+llvm_tracer_trace_path
+llvm_tracer_check_trace_break
+llvm_tracer_trace_break
+llvm_ifc_add_target_address
