@@ -35,7 +35,8 @@ enum ProfilingType {
   PathInfo      = 5,   /* Path profiling information      */
   BBTraceInfo   = 6,   /* Basic block trace information   */
   OptEdgeInfo   = 7,   /* Edge profiling information, optimal version */
-  IFCInfo       = 8    /* Indirect function call information */
+  IFCInfo       = 8,   /* Indirect function call information */
+  TraceInfo     = 9    /* Trace profiling information */
 };
 
 /*

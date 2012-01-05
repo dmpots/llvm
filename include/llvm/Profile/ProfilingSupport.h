@@ -26,7 +26,7 @@ namespace llvm {
   class Module;
 
   namespace prof {
-    // Types
+    // -----------------------------     Types    -----------------------------//
     typedef uint32_t FunctionNumber;
     typedef uint32_t CallSiteNumber;
     typedef uint32_t BasicBlockNumber;
@@ -35,14 +35,7 @@ namespace llvm {
     typedef std::vector<CallInst *>  CallSiteNumbering;
     typedef std::vector<BasicBlock*> BasicBlockNumbering;
 
-    // Record structure that is written to the output file
-    struct IFCProfileRecord {
-      CallSiteNumber CallSite;
-      FunctionNumber Target;
-      BigCounter     Count;
-    };
-
-    // Functions
+    // -----------------------------  Functions  -----------------------------//
     bool isIndirectCall(const CallInst& call);
     void computeFunctionNumbering(Module& M, FunctionNumbering *Functions);
     void computeCallSiteNumbering(Module& M, CallSiteNumbering *Calls);
@@ -59,8 +52,49 @@ namespace llvm {
     /// Insert an llvm.annotation to record the function number of the function
     void addFunctionNumberAnnotation(Function *F, FunctionNumber FN);
 
-    // Data
+    // -----------------------------     Data    -----------------------------//
     static const FunctionNumber UnknownFunction = 0;
+
+
+    // ------------------------- Output file formats -------------------------//
+    // Indirect Function Call Record structure that is written to the output file
+    struct IFCProfileRecord {
+      CallSiteNumber CallSite;
+      FunctionNumber Target;
+      BigCounter     Count;
+    };
+
+    // Trace profiling external format (binary data file)
+    //
+    // =======================================
+    // ProfilingInfoType (TraceInfo)
+    // -- Header --
+    // TraceSize (NumRecords = N)
+    // NumHeaderHits (HotnessCounter[Header])
+    // -- Header --
+    // TraceProfileRecord1
+    // TraceProfileRecord2
+    // ...
+    // TraceProfileRecordN
+    // =======================================
+    enum TraceProfileRecordType {
+      TraceGapRecord,
+      TraceBlockRecord,
+      TraceHeaderBlockRecord
+    };
+
+    struct TraceProfileHeader {
+      int TraceSize;
+      BigCounter NumHits;
+    };
+
+    struct TraceProfileRecord {
+      TraceProfileRecordType Tag;
+      union {
+        BasicBlockNumber BlockNumber;
+        FunctionNumber   FunctionNumber;
+      };
+    };
   }
 }
 #endif

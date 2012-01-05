@@ -13,6 +13,7 @@
 \*===----------------------------------------------------------------------===*/
 
 #include "TraceFileManagement.h"
+#include "llvm/Analysis/ProfileInfoTypes.h"
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -100,7 +101,7 @@ int getOutFile() {
 
     /* Output the command line arguments to the file. */
     {
-      int PTy   = 0;
+      int PTy   = ArgumentInfo;
       int Zeros = 0;
       if (write(OutFile, &PTy, sizeof(int)) < 0 ||
           write(OutFile, &SavedArgsLength, sizeof(unsigned)) < 0 ||

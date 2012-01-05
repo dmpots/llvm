@@ -114,7 +114,11 @@ static bool isTraceHeader(BasicBlock const& BB) {
   if(!isEntryBlock(BB)) return false;
 
   StringRef const& Name = BB.getParent()->getName();
-  return (Name.endswith("_entry") && !Name.startswith("stg_"));
+  bool isValidHeader = (Name.endswith("_entry") &&
+                        !Name.startswith("stg_") &&
+                        !Name.startswith("base_"));
+
+  return isValidHeader;
 }
 
 static Constant *getI32Callback(Module& M, const char* Name) {
@@ -250,5 +254,15 @@ bool TraceProfiler::runOnModule(Module &M) {
   for(prof::CallSiteNumber CN = 1; CN < Calls.size(); ++CN) {
     instrumentCall(Calls[CN], FMap);
   }
+
+  // Insert initialization call if we have a main function
+  Function *Main = M.getFunction("main");
+  assert(Main && "Must have main function to initialize profiling runtime");
+  if(Main) {
+    InsertProfilingInitCall(Main, "llvm_start_trace_profiling_runtime",
+                            NULL, /* No constant array needed */
+                            NULL  /* No constant array type needed*/);
+  }
+
   return true;
 }
