@@ -23,6 +23,7 @@
 #include "llvm/Analysis/ProfileInfo.h"
 #include "llvm/Analysis/ProfileInfoLoader.h"
 #include "llvm/Analysis/IndirectFunctionCallProfileInfo.h"
+#include "llvm/Analysis/TraceProfileInfo.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/CommandLine.h"
@@ -68,11 +69,13 @@ namespace {
   enum ProfileTypes {
     EdgeProfileType
   , IFCProfileType
+  , TraceProfileType
   };
   cl::opt<ProfileTypes>
   ProfileType("profile-type", cl::desc("Profiling data file type:"),
     cl::values(clEnumValN(EdgeProfileType,"edge","Edge/basic Block profile"),
                clEnumValN(IFCProfileType,"ifc","Indirect function call profile"),
+               clEnumValN(TraceProfileType,"trace","Trace profile"),
                clEnumValEnd));
 }
 
@@ -400,6 +403,74 @@ bool IFCProfileInfoPrinterPass::runOnModule(Module& M) {
 }
 
 //----------------------------------------------------------------------------//
+//===---------------         Trace Profiles          ----------------------===//
+//----------------------------------------------------------------------------//
+namespace {
+  /// IFCProfileInfoPrinterPass - Helper pass to dump the ifc profile
+  /// information for a module.
+  //
+  class TraceProfileInfoPrinterPass : public ModulePass {
+  public:
+    static char ID; // Class identification, replacement for typeinfo.
+    TraceProfileInfoPrinterPass() : ModulePass(ID) {}
+
+    virtual void getAnalysisUsage(AnalysisUsage &AU) const {
+      AU.setPreservesAll();
+      AU.addRequired<TraceProfileInfo>();
+    }
+
+    // the full name of the printer pass
+    virtual const char* getPassName() const {
+      return "Trace Profiling Information Printer";
+    }
+
+    bool runOnModule(Module &M);
+  };
+}
+
+char TraceProfileInfoPrinterPass::ID = 0;
+bool TraceProfileInfoPrinterPass::runOnModule(Module& M) {
+    TraceProfileInfo &PI = getAnalysis<TraceProfileInfo>();
+    outs() << PI.getTraces().size() << " Traces found\n";
+    outs() << PI.brokenTraceCount() << " Broken traces found\n";
+    int TraceId = 0;
+
+    TraceProfileList& Traces = PI.getTraces();
+    for(TraceProfileList::iterator I = Traces.begin(), E = Traces.end();
+        I!=E; ++I) {
+      TraceProfile& Trace = *I;
+      TraceProfile::FunctionList& Functions = Trace.getFunctions();
+      TraceId++;
+
+      outs() << std::string(80, '-') << "\n";
+      std::cout << "Trace #" << TraceId
+                << " @" << Functions.front()->getName().str()
+                << " (" << Trace.Blocks.size() << " Blocks"
+                << " in "    << Functions.size()    << " Functions) "
+                << std::setw(6) << std::setprecision(2) << std::fixed
+                << (Trace.ExecutionPercent * 100) << "%"
+                << "\n";
+      outs() << std::string(80, '-') << "\n";
+
+      Function *Fprev = NULL;
+      for(TraceProfile::iterator B = Trace.Blocks.begin(), BE = Trace.Blocks.end();
+          B != BE; ++B) {
+        BasicBlock  *BB = *B;
+        Function    *F  = BB->getParent();
+
+        if(F != Fprev) {
+          Fprev = F;
+          outs() << "  @" << F->getName() << "\n";
+        }
+        outs() << "    " << BB->getName() << "\n";
+      }
+    }
+
+    return false;
+}
+
+
+//----------------------------------------------------------------------------//
 //===----------------------- Main Entry Point -----------------------------===//
 //----------------------------------------------------------------------------//
 int main(int argc, char **argv) {
@@ -448,6 +519,10 @@ int main(int argc, char **argv) {
   case IFCProfileType:
     PassMgr.add(createIndirectFunctionCallProfileLoaderPass());
     PassMgr.add(new IFCProfileInfoPrinterPass());
+    break;
+  case TraceProfileType:
+    PassMgr.add(createTraceProfileLoaderPass());
+    PassMgr.add(new TraceProfileInfoPrinterPass());
     break;
   default:
     errs() << "Unknown profile type: " << ProfileType;
