@@ -283,23 +283,6 @@ void IndirectFunctionCallProfileLoader::handleIFCProfileInfo(FILE* file) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// We have to take care that we don't overflow the double value when converting
-// from the 64-bit counter. We guard against this by checking to see if the
-// counter is less than 2^52. Since a double has a mantissa of 52 bits (and an
-// exponent that can go far beyond 52), we can exactly represent any integer
-// value < 2^52. If the counter is greater than that value, we simply cap it at
-// the max double value.
-static double convertToDoubleWithOverflowCheck(prof::BigCounter Counter) {
-  static const prof::BigCounter MaxDoubleInteger(prof::BigCounter(1)<<52);
-  static const double MaxDouble = std::numeric_limits<double>::max();
-
-  if(Counter < MaxDoubleInteger) {
-    return static_cast<double>(Counter);
-  }
-  return MaxDouble;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Sort two IFCTargets in descending order by Percent
 //
 static bool sortTargetsByPercent(const IFCTarget &T1, const IFCTarget T2) {
@@ -368,7 +351,7 @@ void IndirectFunctionCallProfileLoader::populateCallProfileMap() {
              "Unexpected duplicate target function in CallProfile");
 
       // Insert the target into profile targets vector for this call site
-      double Percent = convertToDoubleWithOverflowCheck(Counter);
+      double Percent = prof::convertToDoubleWithOverflowCheck(Counter);
       Targets.push_back(IFCTarget(F, Percent, Counter));
     }
 
@@ -380,7 +363,7 @@ void IndirectFunctionCallProfileLoader::populateCallProfileMap() {
     }
 
     // Now run through the targets and compute the percentages.
-    double dTotal = convertToDoubleWithOverflowCheck(TotalHits);
+    double dTotal = prof::convertToDoubleWithOverflowCheck(TotalHits);
     for(CallSiteProfile::iterator Target = Targets.begin(), TE = Targets.end();
         Target != TE; ++Target) {
       Target->Percent /= dTotal;

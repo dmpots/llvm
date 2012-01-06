@@ -52,6 +52,10 @@ namespace llvm {
     /// Insert an llvm.annotation to record the function number of the function
     void addFunctionNumberAnnotation(Function *F, FunctionNumber FN);
 
+    /// Convert a big conter to a double but check for overflow. If it overflows
+    /// set it to be the max double value.
+    double convertToDoubleWithOverflowCheck(prof::BigCounter Counter);
+
     // -----------------------------     Data    -----------------------------//
     static const FunctionNumber UnknownFunction = 0;
 
