@@ -227,6 +227,8 @@ void initializeTailCallElimPass(PassRegistry&);
 void initializeTargetDataPass(PassRegistry&);
 void initializeTargetLibraryInfoPass(PassRegistry&);
 void initializeTraceProfilerPass(PassRegistry&);
+void initializeTraceProfileInfoAnalysisGroup(PassRegistry&);
+void initializeTraceProfileLoaderPass(PassRegistry&);
 void initializeTwoAddressInstructionPassPass(PassRegistry&);
 void initializeTypeBasedAliasAnalysisPass(PassRegistry&);
 void initializeUnifyFunctionExitNodesPass(PassRegistry&);

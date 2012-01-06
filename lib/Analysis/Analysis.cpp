@@ -71,6 +71,8 @@ void llvm::initializeAnalysis(PassRegistry &Registry) {
   initializeRegionOnlyPrinterPass(Registry);
   initializeScalarEvolutionPass(Registry);
   initializeScalarEvolutionAliasAnalysisPass(Registry);
+  initializeTraceProfileInfoAnalysisGroup(Registry);
+  initializeTraceProfileLoaderPass(Registry);
   initializeTypeBasedAliasAnalysisPass(Registry);
 }
 

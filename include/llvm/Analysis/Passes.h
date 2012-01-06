@@ -214,6 +214,13 @@ namespace llvm {
   // implements the default "no indirect function call profile".
   //
   ImmutablePass *createNoIndirectFunctionCallProfileInfoPass();
+
+  //===--------------------------------------------------------------------===//
+  //
+  // createTraceProfileLoaderPass - This pass loads information from an trace
+  // profile dump file.
+  //
+  ModulePass *createTraceProfileLoaderPass();
 }
 
 #endif
