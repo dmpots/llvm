@@ -226,6 +226,7 @@ void initializeStrongPHIEliminationPass(PassRegistry&);
 void initializeTailCallElimPass(PassRegistry&);
 void initializeTargetDataPass(PassRegistry&);
 void initializeTargetLibraryInfoPass(PassRegistry&);
+void initializeTraceBuilderPass(PassRegistry&);
 void initializeTraceProfilerPass(PassRegistry&);
 void initializeTraceProfileInfoAnalysisGroup(PassRegistry&);
 void initializeTraceProfileLoaderPass(PassRegistry&);

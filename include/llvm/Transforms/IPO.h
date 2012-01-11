@@ -198,6 +198,12 @@ ModulePass *createPartialInliningPass();
 ///
 ModulePass *createIndirectFunctionCallPromotionPass();
 
+//===----------------------------------------------------------------------===//
+/// createTraceBuilderPass - This pass builds program traces based on profiling
+/// data.
+///
+ModulePass *createTraceBuilderPass();
+
 } // End llvm namespace
 
 #endif

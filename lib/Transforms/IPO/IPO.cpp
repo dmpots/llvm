@@ -45,6 +45,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeStripDeadDebugInfoPass(Registry);
   initializeStripNonDebugSymbolsPass(Registry);
   initializeIndirectFunctionCallPromotionPass(Registry);
+  initializeTraceBuilderPass(Registry);
 
 }
 

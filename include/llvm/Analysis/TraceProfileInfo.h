@@ -32,6 +32,11 @@ class TraceProfile {
   double ExecutionPercent;
   Trace Blocks;
   FunctionList& getFunctions();
+  int TraceNum;
+
+  // Iteration
+  iterator begin() {return Blocks.begin();}
+  iterator end()   {return Blocks.end();}
 
  private:
   FunctionList Functions;

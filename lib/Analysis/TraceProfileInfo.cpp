@@ -134,6 +134,13 @@ bool TraceProfileLoader::runOnModule(Module& M) {
   // sort by most common trace
   std::sort(TraceProfiles.begin(), TraceProfiles.end(), traceSorter);
 
+  // record trace numbers in sorted order
+  int i = 0;
+  for(TraceProfileList::iterator I = TraceProfiles.begin(),
+        E = TraceProfiles.end(); I != E; ++I){
+    I->TraceNum = i++;
+  }
+
 
   return false; // does not modify the module
 }
