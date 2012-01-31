@@ -443,13 +443,12 @@ bool TraceProfileInfoPrinterPass::runOnModule(Module& M) {
       TraceId++;
 
       outs() << std::string(80, '-') << "\n";
-      std::cout << "Trace #" << TraceId
-                << " @" << Functions.front()->getName().str()
-                << " (" << Trace.Blocks.size() << " Blocks"
-                << " in "    << Functions.size()    << " Functions) "
-                << std::setw(6) << std::setprecision(2) << std::fixed
-                << (Trace.ExecutionPercent * 100) << "%"
-                << "\n";
+      outs() << "Trace #" << TraceId
+             << " @" << Functions.front()->getName().str()
+             << " (" << Trace.Blocks.size() << " Blocks"
+             << " in "    << Functions.size()    << " Functions) "
+             << format("%3.2f", (Trace.ExecutionPercent * 100)) << "%"
+             << "\n";
       outs() << std::string(80, '-') << "\n";
 
       Function *Fprev = NULL;
