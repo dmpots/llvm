@@ -33,6 +33,15 @@ bool prof::isIndirectCall(const CallInst& call) {
   return true;
 }
 
+bool prof::isIntrinsicCall(const CallInst& call) {
+  const Value *V = call.getCalledValue();
+  if(!V) return false;
+
+  if (isa<GlobalValue>(V) && V->getName().startswith("llvm.")) return true;
+
+  return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Compute the correct function, block, and callsite numbers by walking the module
 //

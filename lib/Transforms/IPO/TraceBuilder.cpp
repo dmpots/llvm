@@ -170,11 +170,13 @@ static Function *cloneTraceFunction(Module *M, Function *F_clone,
 static CallInst* findCallToClone(BasicBlock* BB) {
   // Find the call instruction in this block which we will change to call the
   // cloned trace function. The call must exist and for now we require that
-  // there is only one call in the block.
+  // there is only one call in the block or that the other calls are intrinsic
+  // calls.
   CallInst *Call = NULL;
   for(BasicBlock::iterator I = BB->begin(), E = BB->end(); I!=E; ++I) {
     if(CallInst *C = dyn_cast<CallInst>(&(*I))) {
-      assert(Call == NULL && "Can't clone a trace block with multiple calls");
+      assert((Call == NULL || prof::isIntrinsicCall(*Call))
+             && "Can't clone a trace block with multiple calls");
       Call = C;
     }
   }

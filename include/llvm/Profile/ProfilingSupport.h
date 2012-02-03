@@ -37,6 +37,7 @@ namespace llvm {
 
     // -----------------------------  Functions  -----------------------------//
     bool isIndirectCall(const CallInst& call);
+    bool isIntrinsicCall(const CallInst& call);
     void computeFunctionNumbering(Module& M, FunctionNumbering *Functions);
     void computeCallSiteNumbering(Module& M, CallSiteNumbering *Calls);
     void computeBasicBlockNumbering(Module& M, BasicBlockNumbering *Blocks);

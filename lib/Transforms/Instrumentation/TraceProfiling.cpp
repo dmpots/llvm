@@ -56,6 +56,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Profile/ProfilingSupport.h"
@@ -102,6 +103,11 @@ char TraceProfiler::ID = 0;
 INITIALIZE_PASS(TraceProfiler, "insert-trace-profiling",
                 "Insert instrumentation for trace profiling",
                 false, false)
+
+cl::opt<bool>
+BreakTraceOnIntrinsic("break-trace-on-intrinsic", cl::init(true),
+  cl::desc("A trace break is inserted for intrinsic calls"), cl::Hidden);
+
 
 //==============================================================================
 // Pass Implementation
@@ -212,6 +218,8 @@ void TraceProfiler::addDirectCallInstrumentation(CallInst *C, const FunctionMap 
 }
 
 void TraceProfiler::instrumentCall(CallInst *C, const FunctionMap &FMap) {
+  if(prof::isIntrinsicCall(*C) && !BreakTraceOnIntrinsic) return;
+
   if(prof::isIndirectCall(*C)) {
     addIndirectCallInstrumentation(C);
   }
