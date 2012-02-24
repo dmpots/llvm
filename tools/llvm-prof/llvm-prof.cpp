@@ -447,21 +447,24 @@ bool TraceProfileInfoPrinterPass::runOnModule(Module& M) {
              << " @" << Functions.front()->getName().str()
              << " (" << Trace.Blocks.size() << " Blocks"
              << " in "    << Functions.size()    << " Functions) "
-             << format("%3.2f", (Trace.ExecutionPercent * 100)) << "%"
+             << format("%6.2f", (Trace.ExecutionPercent * 100)) << "%"
              << "\n";
       outs() << std::string(80, '-') << "\n";
 
       Function *Fprev = NULL;
+      int i = 0;
       for(TraceProfile::iterator B = Trace.Blocks.begin(), BE = Trace.Blocks.end();
           B != BE; ++B) {
         BasicBlock  *BB = *B;
         Function    *F  = BB->getParent();
+        double exitPercent = Trace.ExitPercents[i++];
 
         if(F != Fprev) {
           Fprev = F;
           outs() << "  @" << F->getName() << "\n";
         }
-        outs() << "    " << BB->getName() << "\n";
+        outs() << "    " << BB->getName() << " "
+               << format("%15.2f", (exitPercent * 100)) << "%\n";
       }
     }
 

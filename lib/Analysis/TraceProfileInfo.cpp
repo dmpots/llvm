@@ -241,10 +241,14 @@ bool TraceProfileLoader::handleTraceProfileInfo(FILE *file) {
 
   // Create the profile by looking up the basic blocks corresponding to the
   // block numbers contained in the profile records
-  Profile.ExecutionPercent = convertToDoubleWithOverflowCheck(Header.NumHits);
+  double entries = convertToDoubleWithOverflowCheck(Header.NumHits);
+  Profile.ExecutionPercent = entries;
   for(int i = 0; i < Header.TraceSize; ++i) {
     BasicBlock *B = getBlock(Records[i].BlockNumber);
+    double exitPercent =
+      convertToDoubleWithOverflowCheck(Records[i].ExitCount) / entries;
     Profile.Blocks.push_back(B);
+    Profile.ExitPercents.push_back(exitPercent);
   }
 
   return true;

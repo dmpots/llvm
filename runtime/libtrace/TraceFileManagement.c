@@ -31,6 +31,7 @@ static char *SavedArgs = 0;
 static unsigned SavedArgsLength = 0;
 
 static const char *OutputFilename = "llvmprof.out";
+int flag_BuildShadowTrace = 0;
 
 /* save_arguments - Save argc and argv as passed into the program for the file
  * we output.
@@ -50,7 +51,7 @@ int save_arguments(int argc, const char **argv) {
     memmove(&argv[1], &argv[2], (argc-1)*sizeof(char*));
     --argc;
 
-    if (!strcmp(Arg, "-llvmprof-output")) {
+    if (strcmp(Arg, "-llvmprof-output") == 0) {
       if (argc == 1)
         puts("-llvmprof-output requires a filename argument!");
       else {
@@ -58,7 +59,11 @@ int save_arguments(int argc, const char **argv) {
         memmove(&argv[1], &argv[2], (argc-1)*sizeof(char*));
         --argc;
       }
-    } else {
+    } 
+    else if(strcmp(Arg, "-llvmprof-shadow") == 0) {
+      flag_BuildShadowTrace = 1;
+    }
+    else {
       printf("Unknown option to the profiler runtime: '%s' - ignored.\n", Arg);
     }
   }

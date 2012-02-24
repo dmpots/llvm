@@ -14,7 +14,6 @@
 #ifndef LLVM_ANALYSIS_TRACE_PROFILE_INFO_H
 #define LLVM_ANALYSIS_TRACE_PROFILE_INFO_H
 
-#include "llvm/ADT/OwningPtr.h"
 #include <vector>
 
 namespace llvm {
@@ -28,11 +27,13 @@ class TraceProfile {
   typedef Trace::iterator iterator;
   typedef Trace::const_iterator const_iterator;
   typedef std::vector<Function*> FunctionList;
+  typedef std::vector<double> ExitPercentMap;
 
   double ExecutionPercent;
   Trace Blocks;
   FunctionList& getFunctions();
   int TraceNum;
+  ExitPercentMap ExitPercents;
 
   // Iteration
   iterator begin() {return Blocks.begin();}

@@ -99,6 +99,7 @@ namespace llvm {
         BasicBlockNumber BlockNumber;
         FunctionNumber   FunctionNumber;
       };
+      BigCounter ExitCount;
     };
   }
 }

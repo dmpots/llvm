@@ -18,6 +18,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Command line flag to collect trace completion data */
+extern int flag_BuildShadowTrace;
+
 /* save_arguments - Save argc and argv as passed into the program for the file
  * we output.
  */

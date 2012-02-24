@@ -27,7 +27,7 @@
 #include <cassert>
 
 #define dbgs()   std::cout
-#define DEBUG(s)
+#define DEBUG(s) s
 
 using namespace llvm;
 using namespace llvm::prof;
@@ -61,8 +61,11 @@ namespace {
 
   class Trace {
   public:
+    Trace() : Entries(0) {}
+
     //-------------------- Types ---------------------------//
     typedef std::vector<RuntimeTraceRecord> BlockVec;
+    typedef std::vector<BigCounter> ExitMap;
     typedef BlockVec::size_type size_type;
     typedef BlockVec::value_type value_type;
 
@@ -72,12 +75,20 @@ namespace {
     void     push_back(const RuntimeTraceRecord& b) {Blocks.push_back(b);}
     size_type size() {return Blocks.size();}
     RuntimeTraceRecord& operator[] ( size_type n ) {return Blocks[n];}
+    void clear() {Blocks.clear();}
 
     //------------------ Trace Interface --------------------//
     void convertToExternalFormat(const AddrMap& FunAddrMap);
     void addExternalRecord(TraceProfileRecordType tag, BasicBlockNumber n);
     const ProfileVec& getProfileRecords() const {return ProfileRecords;}
+    void recordExitCounts();
 
+    // Number of times the trace was entered. May be zero if shadow tracing is
+    // not enabled.
+    BigCounter Entries;
+
+    // Keep track of how many times we take an off-trace exit
+    ExitMap Exits;
   private:
     BlockVec Blocks;
     ProfileVec ProfileRecords;
@@ -87,7 +98,8 @@ namespace {
   public:
     Tracer() :
       State(Profiling), CurrentTrace(NULL),
-      HotnessThreshold(10), TraceLengthLimit(100), EndTraceOnBreak(false) {}
+      HotnessThreshold(10), TraceLengthLimit(100), EndTraceOnBreak(false),
+      BuildShadowTrace(flag_BuildShadowTrace) {}
 
     //------------------ Public Interface -------------------//
     void writeDataToFile(int fd);
@@ -100,7 +112,7 @@ namespace {
   private:
     //-------------------- Types ---------------------------//
     enum TraceState {
-      Profiling, Tracing
+      Profiling, Tracing, Shadowing
     };
     typedef std::set<BasicBlockNumber> BBSet;
     typedef BigCounter HotnessCounter;
@@ -114,13 +126,17 @@ namespace {
     BBSet TraceBlocks; // All header blocks that are included in any trace
     HeatMap HotnessCounters;
     Trace *CurrentTrace;
+    Trace *ShadowTarget;
     TraceVec Traces;
     AddrMap FunctionAddressMap;
+    BBSet TraceHeads; // All header blocks that start a trace
+    Trace::size_type ShadowPosition; // For building shadow traces
 
     // Trace building paramters
     HotnessCounter    HotnessThreshold;
     Trace::size_type  TraceLengthLimit;
     bool EndTraceOnBreak;
+    bool BuildShadowTrace;
 
     //------------------- Methods --------------------------//
     void startNewTrace(BasicBlockNumber BBHead);
@@ -129,6 +145,11 @@ namespace {
     void extendTraceWithBreak(const RuntimeTraceRecord& TraceRecord);
     void breakTrace(FunctionNumber FN);
     void breakTraceOnAddress(Address addr);
+
+    // Shadow tracing
+    void startShadowTrace(BasicBlockNumber BBn);
+    void extendShadowTrace(BasicBlockNumber BBn);
+    void endShadowTrace();
   };
 }
 
@@ -136,6 +157,15 @@ namespace {
 //==============================================================================
 // Trace Implementation
 //
+void Trace::recordExitCounts() {
+  assert(ProfileRecords.size() == Exits.size());
+  int i = 0;
+  for(ProfileVec::iterator I = ProfileRecords.begin(), E = ProfileRecords.end();
+      I != E; ++I) {
+    I->ExitCount = Exits[i++];
+  }
+}
+
 void Trace::addExternalRecord(TraceProfileRecordType tag, BasicBlockNumber n) {
   TraceProfileRecord Rec;
   Rec.Tag = tag;
@@ -172,6 +202,9 @@ void Trace::convertToExternalFormat(const AddrMap& FunAddrMap) {
     }
   }
 
+  // Allocate space to keep track of how many times we take off trace exits
+  Exits.resize(ProfileRecords.size());
+
   // Get rid of extra space used by blocks
   Blocks.clear();
 }
@@ -203,10 +236,10 @@ void Trace::convertToExternalFormat(const AddrMap& FunAddrMap) {
 // the trace or a basic block number for the normal trace entries.
 //
 // Record:
-//  <-- 4 bytes --> <-- 4 bytes  -->
-// +---------------+----------------+
-// |   Tag         |   Payload      |
-// +---------------+----------------+
+//  <-- 4 bytes --> <-- 4 bytes  --> <--------- 8 bytes ----------->
+// +---------------+----------------+------------------------------+
+// |   Tag         |   Payload      | Exit Count                   |
+// +---------------+----------------+------------------------------+
 //
 void Tracer::writeDataToFile(int fd) {
   DEBUG(dbgs() << "Writing " << Traces.size() << " traces to disk\n");
@@ -214,6 +247,7 @@ void Tracer::writeDataToFile(int fd) {
 
   // Loop over all the traces
   for(TraceVec::iterator T = Traces.begin(), E = Traces.end(); T != E; ++T) {
+    (*T)->recordExitCounts();
     const Trace::ProfileVec& Records = (*T)->getProfileRecords();
 
     // Write profiling info tag to indicate a trace comes next
@@ -224,7 +258,7 @@ void Tracer::writeDataToFile(int fd) {
     // Write out the trace header
     TraceProfileHeader Header;
     Header.TraceSize = Records.size();
-    Header.NumHits   = HotnessCounters[Records[0].BlockNumber];
+    Header.NumHits   = (*T)->Entries;
     if(write(fd, &Header, sizeof(TraceProfileHeader)) < 0) {
       std::cerr << "error: Unable to write trace profile header.\n";
     }
@@ -237,6 +271,7 @@ void Tracer::writeDataToFile(int fd) {
       TraceProfileRecord Record;
       Record.Tag = R->Tag;
       Record.BlockNumber = R->BlockNumber; // also works for function number
+      Record.ExitCount = R->ExitCount;
 
       if(write(fd, &Record, sizeof(TraceProfileRecord)) < 0) {
         std::cerr << "error: Unable to write trace profile record.\n";
@@ -251,6 +286,7 @@ void Tracer::startNewTrace(BasicBlockNumber BBHead) {
   assert((CurrentTrace == NULL) && "Should have committed previous trace");
   DEBUG(dbgs() << "!\n!TRACE #" << Traces.size() << " @" << BBHead << "\n!\n");
   State = Tracing;
+  TraceHeads.insert(BBHead);
 
   CurrentTrace = new Trace;
   extendTrace(RuntimeTraceHeader, BBHead);
@@ -323,6 +359,67 @@ void Tracer::breakTraceOnAddress(Address Addr) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+//                          Shadow Traces
+// Shadow traces are used to keep track of which exits from a trace are taken.
+// This information can be used to decide if a trace is worth building.
+////////////////////////////////////////////////////////////////////////////////
+void Tracer::startShadowTrace(BasicBlockNumber BBn) {
+  assert(State == Profiling);
+  assert(ShadowTarget == NULL && "Should not have a shadow target already");
+  State = Shadowing;
+
+  // Find the trace we are shadowing
+  for(TraceVec::reverse_iterator T = Traces.rbegin(), E = Traces.rend();
+      T != E; ++T) {
+    BasicBlockNumber Header = ((*T)->getProfileRecords().front()).BlockNumber;
+    if(Header == BBn) {
+      ShadowTarget = *T;
+    }
+  }
+  assert(ShadowTarget != NULL && "Could not find trace with given header");
+
+  // Increment the entry count for this trace target
+  ShadowTarget->Entries++;
+
+  // Reset the position to the start of the trace. We will check to see that the
+  // blocks match as we move through the shadow trace. Start the position at 1
+  // to get the first non-header block on the trace.
+  ShadowPosition = 1;
+}
+
+void Tracer::extendShadowTrace(BasicBlockNumber BBn) {
+  assert(ShadowTarget != NULL);
+  const Trace::ProfileVec &Profile = ShadowTarget->getProfileRecords();
+  Trace::size_type TraceSize = Profile.size();
+  Trace::size_type Position = ShadowPosition++;
+  bool Stop = false;
+  BasicBlockNumber ProfileBlock = Profile[Position].BlockNumber;
+  assert(Position < TraceSize);
+
+  // Check to see that the current block matches the same one that we
+  // found when recording the trace
+  if(ProfileBlock != BBn) {
+    // The block number does not match which means that the exit from the
+    // previous basic block did not stay on the trace.
+    ++(ShadowTarget->Exits[Position-1]);
+    Stop = true;
+  }
+  // Check to see if we successfully made it to the end of the trace
+  else if(ShadowPosition == TraceSize) {
+    // We got all the way through, so increment the end of trace counter
+    ++(ShadowTarget->Exits[Position]);
+    Stop = true;
+  }
+  if(Stop) {endShadowTrace();}
+}
+
+void Tracer::endShadowTrace() {
+  ShadowTarget   = NULL;
+  ShadowPosition = 0;
+  State = Profiling;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 //                          TRACER PUBLIC INTERFACE
 //                       (callbacks from the C interface)
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,12 +429,20 @@ void Tracer::traceHead(BasicBlockNumber BBHead) {
     extendTrace(RuntimeTraceHeader, BBHead);
     return;
   }
+  if(State == Shadowing) {
+    extendShadowTrace(BBHead);
+    return;
+  }
+
+  // Start a new shadow trace if this block is a trace header of an existing trace
+  if(BuildShadowTrace && TraceHeads.count(BBHead)) {
+    startShadowTrace(BBHead);
+    return;
+  }
+
   // Update the hotness counter for this trace head. We always do this so that
   // we can include some basic hotness statistics with the trace.
   HotnessCounter Hits = ++(HotnessCounters[BBHead]);
-
-  // Otherwise we might start a new trace. Check to see that the block meets all
-  // the conditions for starting a new trace and if so have at it.
 
   // Check to see if this header block is included in another trace. If so then
   // we won't start a new trace from this block.
@@ -345,7 +450,7 @@ void Tracer::traceHead(BasicBlockNumber BBHead) {
     return;
   }
 
-  // Check to see if the trace hot enough to start tracing.
+  // Check to see if the trace is hot enough to start tracing.
   if(Hits > HotnessThreshold) {
     startNewTrace(BBHead);
   }
@@ -354,6 +459,9 @@ void Tracer::traceHead(BasicBlockNumber BBHead) {
 void Tracer::tracePath(BasicBlockNumber BBPath) {
   if(State == Tracing) {
     extendTrace(RuntimeTraceBlock, BBPath);
+  }
+  else if(State == Shadowing) {
+    extendShadowTrace(BBPath);
   }
 }
 
