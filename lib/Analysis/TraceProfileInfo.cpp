@@ -104,7 +104,7 @@ INITIALIZE_AG_PASS(TraceProfileLoader,
                    true)  // Is default Analysis Group Implementation
 
 static bool traceSorter(const TraceProfile& T1, const TraceProfile& T2) {
-  return T1.ExecutionPercent < T2.ExecutionPercent;
+  return T1.ExecutionPercent > T2.ExecutionPercent;
 }
 
 //----------------------------------------------------------------------------//
