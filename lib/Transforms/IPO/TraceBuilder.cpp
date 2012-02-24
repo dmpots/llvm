@@ -82,6 +82,11 @@ InsertTraceProfiling("profile-traces", cl::init(false),
   cl::desc("Add instrumentation to traces built with the build-traces pass"),
   cl::Hidden);
 
+static cl::opt<double>
+TraceCompletionCutoff("trace-completion-cutoff", cl::init(0.0),
+  cl::desc("Don't build traces with completion rates less than this"),
+  cl::Hidden);
+
 
 //==============================================================================
 // Trace Instrumentation
@@ -337,6 +342,15 @@ static void buildTrace(Module *M, TraceProfile& Trace) {
     addTraceInstrumentation(M, Trace, FunctionClones);
 }
 
+static bool shouldInstantiateTrace(const TraceProfile& Trace) {
+  bool ok = true;
+  if(Trace.ExitPercents.back() < TraceCompletionCutoff) {
+    ok = false;
+  }
+
+  return ok;
+}
+
 //==============================================================================
 // External Interface
 //
@@ -349,7 +363,9 @@ bool TraceBuilder::runOnModule(Module &M) {
 
   TraceProfileList &Traces = TracePI.getTraces();
   for(TraceProfileList::iterator T = Traces.begin(), E = Traces.end();T!=E;++T) {
-    buildTrace(&M, *T);
+    if(shouldInstantiateTrace(*T)) {
+      buildTrace(&M, *T);
+    }
   }
 
   return sNumTracesBuilt > 0;
