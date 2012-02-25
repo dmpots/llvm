@@ -440,7 +440,6 @@ bool TraceProfileInfoPrinterPass::runOnModule(Module& M) {
         I!=E; ++I) {
       TraceProfile& Trace = *I;
       TraceProfile::FunctionList& Functions = Trace.getFunctions();
-      TraceId++;
 
       outs() << std::string(80, '-') << "\n";
       outs() << "Trace #" << TraceId
@@ -450,6 +449,7 @@ bool TraceProfileInfoPrinterPass::runOnModule(Module& M) {
              << format("%6.2f", (Trace.ExecutionPercent * 100)) << "%"
              << "\n";
       outs() << std::string(80, '-') << "\n";
+      TraceId++;
 
       Function *Fprev = NULL;
       int i = 0;
