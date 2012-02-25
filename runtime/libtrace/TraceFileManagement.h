@@ -22,6 +22,9 @@ extern "C" {
 /* Command line flag to collect trace completion data */
 extern int flag_BuildShadowTrace;
 
+/* Command line flag to control hotness threshold */
+extern int flag_HotnessThreshold;
+
 /* save_arguments - Save argc and argv as passed into the program for the file
  * we output.
  */

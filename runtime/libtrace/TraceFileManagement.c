@@ -32,6 +32,7 @@ static unsigned SavedArgsLength = 0;
 
 static const char *OutputFilename = "llvmprof.out";
 int flag_BuildShadowTrace = 0;
+int flag_HotnessThreshold = 100000;
 
 /* save_arguments - Save argc and argv as passed into the program for the file
  * we output.
@@ -62,6 +63,15 @@ int save_arguments(int argc, const char **argv) {
     } 
     else if(strcmp(Arg, "-llvmprof-shadow") == 0) {
       flag_BuildShadowTrace = 1;
+    }
+    else if(strcmp(Arg, "-llvmprof-hotness") == 0) {
+      if (argc == 1)
+        puts("-llvmprof-hotness requires an argument!");
+      else {
+        flag_HotnessThreshold = atol(argv[1]);
+        memmove(&argv[1], &argv[2], (argc-1)*sizeof(char*));
+        --argc;
+      }
     }
     else {
       printf("Unknown option to the profiler runtime: '%s' - ignored.\n", Arg);

@@ -97,8 +97,11 @@ namespace {
   class Tracer {
   public:
     Tracer() :
-      State(Profiling), CurrentTrace(NULL),
-      HotnessThreshold(10), TraceLengthLimit(100), EndTraceOnBreak(false),
+      State(Profiling),
+      CurrentTrace(NULL),
+      HotnessThreshold(flag_HotnessThreshold),
+      TraceLengthLimit(100),
+      EndTraceOnBreak(false),
       BuildShadowTrace(flag_BuildShadowTrace) {}
 
     //------------------ Public Interface -------------------//
